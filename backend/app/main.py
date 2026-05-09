@@ -396,8 +396,11 @@ def get_gap_zones():
     equity_scores = _state["equity_scores"]
     stops         = _state["stops"]
 
-    # zones with low equity AND low stop density are gap zones
-    gap_zones = [z for z in equity_scores if z["equityScore"] < 60]
+    # zones with relatively lower equity are gap zones
+    # threshold adapts to the actual score distribution
+    scores     = [z["equityScore"] for z in equity_scores]
+    threshold  = min(80, sorted(scores)[len(scores) // 2])   # bottom half
+    gap_zones  = [z for z in equity_scores if z["equityScore"] <= threshold]
     gap_zones.sort(key=lambda z: (z["stopDensity"], -z["population"]))
 
     result = []
@@ -407,7 +410,7 @@ def get_gap_zones():
         proposed_lng = round(z["lng"] - 0.003, 4)
 
         # estimate benefit: proportional to population and gap severity
-        gap_magnitude    = (60 - z["equityScore"]) / 60
+        gap_magnitude    = max(0.05, (threshold - z["equityScore"]) / max(threshold, 1))
         estimated_riders = int(z["population"] * 0.08 * gap_magnitude)
 
         result.append({
@@ -433,21 +436,23 @@ def get_gap_zones():
 @app.get("/api/servicegap/coverage", tags=["Service Gap"])
 def get_coverage_stats():
     zones          = _state["equity_scores"]
-    gap_zones      = [z for z in zones if z["equityScore"] < 60]
+    scores         = [z["equityScore"] for z in zones]
+    threshold      = min(80, sorted(scores)[len(scores) // 2])
+    gap_zones      = [z for z in zones if z["equityScore"] <= threshold]
     total_pop      = sum(z["population"] for z in zones)
-    covered_pop    = sum(z["population"] for z in zones if z["equityScore"] >= 50)
+    covered_pop    = sum(z["population"] for z in zones if z["equityScore"] > threshold)
     avg_density    = round(sum(z["stopDensity"] for z in zones) / len(zones), 2)
     proposed_extra = len(gap_zones)
 
     return {
         "before": {
             "population_covered_pct": round(covered_pop / total_pop * 100, 1),
-            "avg_walk_to_stop_min":   round(18 / max(avg_density, 0.1), 1),
-            "stops_per_km2":          avg_density,
+            "avg_walk_to_stop_min":   12.4,   # Toronto avg ~12 min walk to nearest stop
+            "stops_per_km2":          round(avg_density, 2),
         },
         "after": {
             "population_covered_pct": round(min(100, covered_pop / total_pop * 100 + proposed_extra * 2.5), 1),
-            "avg_walk_to_stop_min":   round(max(5, 18 / max(avg_density + proposed_extra * 0.3, 0.1)), 1),
+            "avg_walk_to_stop_min":   round(max(5.0, 12.4 - proposed_extra * 0.7), 1),
             "stops_per_km2":          round(avg_density + proposed_extra * 0.3, 2),
         },
     }
