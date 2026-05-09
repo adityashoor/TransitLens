@@ -1,0 +1,163 @@
+@import "tailwindcss";
+
+/* ── Poppins as default font ────────────────────────────── */
+* { font-family: 'Poppins', sans-serif; }
+
+/* ── Design tokens ──────────────────────────────────────── */
+:root {
+  --primary:       #6259ca;
+  --primary-dark:  #4d47c3;
+  --primary-light: #8780e0;
+  --primary-01:    rgba(98,89,202,0.1);
+  --primary-02:    rgba(98,89,202,0.2);
+  --secondary:     #eb6f33;
+  --success:       #19b159;
+  --info:          #4ec2f0;
+  --warning:       #f7b731;
+  --danger:        #f5334f;
+
+  --body-bg:       #f0f0f6;
+  --sidebar-bg:    #1a1c2e;
+  --sidebar-grad:  linear-gradient(180deg, #1a1c2e 0%, #2b2d69 100%);
+  --card-bg:       #ffffff;
+  --card-shadow:   0 0.75rem 1.5rem rgba(18,38,63,0.06);
+  --card-radius:   0.75rem;
+  --border-color:  #e8e8f7;
+
+  --text-primary:  #1a1c2e;
+  --text-muted:    #7b8191;
+  --text-light:    #a8afc7;
+}
+
+/* ── Global resets ──────────────────────────────────────── */
+body {
+  margin: 0;
+  background: var(--body-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+#root { min-height: 100vh; }
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #f0f0f6; }
+::-webkit-scrollbar-thumb { background: #c4c4e2; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+/* ── Leaflet overrides ──────────────────────────────────── */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: var(--card-radius);
+  font-family: 'Poppins', sans-serif !important;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  font-family: 'Poppins', sans-serif;
+  font-size: 13px;
+}
+.leaflet-popup-tip { background: #fff; }
+
+/* ── Recharts tooltip override ──────────────────────────── */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  border-radius: 0.5rem !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 12px !important;
+}
+
+/* ── Sidebar nav active glow ────────────────────────────── */
+.nav-item-active {
+  background: linear-gradient(to right, rgba(98,89,202,0.22), rgba(98,89,202,0.06));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* ── Card hover lift ────────────────────────────────────── */
+.card-hover {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 1rem 2.5rem rgba(18,38,63,0.1);
+}
+
+/* ── Gradient text utility ──────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(135deg, var(--primary), var(--primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Pill badge ─────────────────────────────────────────── */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 50px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ── Table ──────────────────────────────────────────────── */
+.tl-table { width: 100%; border-collapse: collapse; }
+.tl-table th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: #fafafe;
+}
+.tl-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.tl-table tr:last-child td { border-bottom: none; }
+.tl-table tbody tr:hover td { background: #f8f8fd; }
+
+/* ── Progress bar ───────────────────────────────────────── */
+.progress-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e8e8f7;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--primary), var(--primary-light));
+  transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── Switch toggle ──────────────────────────────────────── */
+.toggle-group {
+  display: inline-flex;
+  background: #e8e8f7;
+  border-radius: 50px;
+  padding: 3px;
+  gap: 2px;
+}
+.toggle-btn {
+  padding: 5px 16px;
+  border-radius: 50px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-muted);
+  background: transparent;
+}
+.toggle-btn.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(98,89,202,0.3);
+}
