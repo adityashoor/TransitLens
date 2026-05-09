@@ -1,0 +1,36 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.5
+    container_name: transitlens-postgis
+    environment:
+      POSTGRES_DB: transitlens
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - transitlens_postgis_data:/var/lib/postgresql/data
+      - ./backend/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d transitlens"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: transitlens-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - transitlens_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  transitlens_postgis_data:
+  transitlens_redis_data:

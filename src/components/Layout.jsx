@@ -4,30 +4,14 @@ import Topbar from "./Topbar";
 
 export default function Layout({ children, active, onNavigate }) {
   const [collapsed, setCollapsed] = useState(false);
-
   return (
-    <div className="flex" style={{ minHeight: "100vh", background: "var(--body-bg)" }}>
-      <Sidebar
-        active={active}
-        onNavigate={onNavigate}
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
-      />
-      <div className="flex-1 flex flex-col min-w-0">
+    <div className="app-shell">
+      <Sidebar active={active} onNavigate={onNavigate} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
+      <div className="main-frame">
         <Topbar active={active} />
-        <main
-          className="flex-1 p-6"
-          id="main-content"
-          tabIndex={-1}
-          style={{ background: "var(--body-bg)" }}
-        >
-          {children}
-        </main>
-        <footer
-          className="px-6 py-3 text-center text-[11px] border-t"
-          style={{ color: "var(--text-light)", borderColor: "var(--border-color)", background: "#fff" }}
-        >
-          TransitLens · TD2026 Data Challenge · Toronto, Canada · Data: TTC GTFS, Statistics Canada, OSM · No PII
+        <main className="content" id="main-content">{children}</main>
+        <footer className="border-t border-[var(--line)] bg-white/70 px-6 py-4 text-center text-[11px] text-[var(--muted)]">
+          TransitLens uses open TTC GTFS, City of Toronto Open Data, PostGIS, FastAPI, and local ML predictions. No personal rider records are stored.
         </footer>
       </div>
     </div>

@@ -1,288 +1,168 @@
-import { useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import { equityNeighborhoods, equityRoutes } from "../data/mockData";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
-import { Card, CardHeader, Badge, PageHeader, PillGroup, StatCard, InfoTag } from "../components/ui";
+import { useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { MapContainer, CircleMarker, Popup, TileLayer } from "react-leaflet";
+import { useApi } from "../hooks/useApi";
+import { api, formatNumber } from "../services/api";
+import { Badge, Card, CardHeader, KPI, PageHeader, Skeleton } from "../components/ui";
+import { chartTooltip } from "../components/chartConfig";
 
-const TORONTO = [43.6532, -79.3832];
+const TORONTO = [43.711, -79.38];
 
-function scoreColor(s) {
-  if (s >= 75) return "#19b159";
-  if (s >= 55) return "#f7b731";
-  if (s >= 40) return "#eb6f33";
-  return "#f5334f";
-}
-function scoreBadge(s) {
-  if (s >= 75) return "success";
-  if (s >= 55) return "warning";
-  if (s >= 40) return "secondary";
-  return "danger";
+function scoreColor(score) {
+  if (score < 40) return "#e5484d";
+  if (score < 65) return "#e7a21a";
+  return "#17a36b";
 }
 
-const FILTERS = ["All", "Low Income", "Seniors", "Disability"];
-
-const CHART_TOOLTIP = {
-  contentStyle: {
-    background: "#fff", border: "1px solid #e8e8f7", borderRadius: 10,
-    boxShadow: "0 4px 20px rgba(18,38,63,0.1)", fontFamily: "Poppins, sans-serif", fontSize: 12,
-  },
-  labelStyle: { color: "#1a1c2e", fontWeight: 600 },
-};
+function pseudoPoint(id) {
+  const n = Number(String(id).replace(/\D/g, "")) || 1;
+  const col = n % 18;
+  const row = Math.floor(n / 18);
+  return [43.60 + row * 0.024, -79.61 + col * 0.030];
+}
 
 export default function EquityScoring() {
-  const [filter, setFilter] = useState("All");
+  const [sort, setSort] = useState("lowest");
   const [selected, setSelected] = useState(null);
+  const equity = useApi(() => api.equity(sort, 50), [sort], []);
 
-  const filtered = equityNeighborhoods.filter((n) => {
-    if (filter === "Low Income") return n.income < 50000;
-    if (filter === "Seniors")    return n.seniorPct >= 15;
-    if (filter === "Disability") return n.disabilityPct >= 12;
-    return true;
-  });
-
-  const avgScore = Math.round(filtered.reduce((a, b) => a + b.equityScore, 0) / filtered.length);
-  const underserved = filtered.filter((n) => n.equityScore < 50).length;
+  const rows = useMemo(() => equity.data || [], [equity.data]);
+  const urgent = rows.filter((row) => row.score < 40);
+  const avgScore = rows.length ? rows.reduce((sum, row) => sum + row.score, 0) / rows.length : 0;
+  const chartRows = useMemo(() => rows.slice(0, 12).map((row) => ({
+    name: row.geography_name,
+    score: row.score,
+    income: row.median_income,
+    stops: row.stop_density,
+  })), [rows]);
 
   return (
-    <section aria-label="Equity Scoring">
+    <section>
       <PageHeader
-        title="Equity Scoring"
-        subtitle="Transit access scored per neighbourhood using census demographics and stop density"
+        title="Neighbourhood Equity Scoring"
+        subtitle="Toronto neighbourhoods ranked with demographic need, stop density, ridership per capita, and distance-to-stop metrics."
         action={
-          <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--text-muted)" }}>
-            <span>Source: Statistics Canada · TTC GTFS</span>
+          <div className="segmented">
+            {["lowest", "highest", "name"].map((item) => (
+              <button key={item} className={sort === item ? "active" : ""} onClick={() => setSort(item)}>
+                {item}
+              </button>
+            ))}
           </div>
         }
       />
 
-      {/* ── Mini KPIs ─────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        <StatCard label="Neighbourhoods" value={filtered.length}                             color="primary"   change="In view" />
-        <StatCard label="Avg Score"      value={avgScore}           unit="/ 100"              color="info"      change="Selected filter" />
-        <StatCard label="Underserved"    value={underserved}                                   color="danger"    change="Score < 50" />
-        <StatCard label="Routes Mapped"  value={equityRoutes.length}                          color="success"   change="With equity data" />
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KPI label="Areas Loaded" value={formatNumber(rows.length)} hint="Neighbourhood score rows" tone="brand" />
+        <KPI label="Improvement Need" value={urgent.length} hint="Score below 40" tone="red" />
+        <KPI label="Average Score" value={avgScore ? avgScore.toFixed(1) : "-"} hint="Current list average" tone="teal" />
+        <KPI label="Closest Stop" value={rows.length ? `${Math.min(...rows.map((r) => r.distance_to_stop || 9999)).toFixed(0)}m` : "-"} hint="Best representative point" tone="green" />
       </div>
 
-      {/* ── Filter pills ───────────────────────────── */}
-      <div className="flex items-center gap-3 mb-4">
-        <span className="text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>Filter by:</span>
-        <PillGroup options={FILTERS} value={filter} onChange={setFilter} />
-      </div>
-
-      {/* ── Main content ───────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Map */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
-          <CardHeader
-            title="Neighbourhood Equity Map"
-            subtitle="Click a marker to view details · Coloured by equity score"
-            action={<Badge color={underserved > 3 ? "danger" : "success"}>{underserved} underserved</Badge>}
-          />
-          <div style={{ height: 420 }}>
-            <MapContainer center={TORONTO} zoom={11} style={{ height: "100%", width: "100%" }} aria-label="Equity map">
-              <TileLayer
-                attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {filtered.map((n) => (
-                <CircleMarker
-                  key={n.id}
-                  center={[n.lat, n.lng]}
-                  radius={16}
-                  pathOptions={{
-                    fillColor: scoreColor(n.equityScore),
-                    fillOpacity: 0.75,
-                    color: selected?.id === n.id ? "#1a1c2e" : scoreColor(n.equityScore),
-                    weight: selected?.id === n.id ? 3 : 1.5,
-                  }}
-                  eventHandlers={{ click: () => setSelected(n) }}
-                >
-                  <MapTooltip direction="top" offset={[0, -12]} opacity={0.95}>
-                    <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12 }}>
-                      <strong>{n.name}</strong><br />
-                      Score: <strong style={{ color: scoreColor(n.equityScore) }}>{n.equityScore}/100</strong>
-                    </div>
-                  </MapTooltip>
-                  <Popup>
-                    <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12, minWidth: 160 }}>
-                      <p style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>{n.name}</p>
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        {[
-                          ["Equity Score", `${n.equityScore}/100`],
-                          ["Median Income", `$${n.income.toLocaleString()}`],
-                          ["Seniors", `${n.seniorPct}%`],
-                          ["Disability", `${n.disabilityPct}%`],
-                          ["Stop Density", `${n.stopDensity}/km²`],
-                        ].map(([k, v]) => (
-                          <tr key={k}>
-                            <td style={{ color: "#7b8191", paddingRight: 8, paddingBottom: 3 }}>{k}</td>
-                            <td style={{ fontWeight: 600 }}>{v}</td>
-                          </tr>
-                        ))}
-                      </table>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
-            </MapContainer>
+          <CardHeader title="Equity Map" subtitle="Neighbourhood score points, coloured by improvement need" action={<Badge color="brand">Toronto 158 model</Badge>} />
+          <div className="h-[470px] p-3">
+            {equity.loading ? <Skeleton /> : (
+              <MapContainer center={TORONTO} zoom={10} className="h-full">
+                <TileLayer attribution="OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {rows.map((area) => {
+                  const point = pseudoPoint(area.geography_id);
+                  return (
+                    <CircleMarker
+                      key={area.geography_id}
+                      center={point}
+                      radius={area.score < 40 ? 10 : 7}
+                      pathOptions={{
+                        color: selected?.geography_id === area.geography_id ? "#172033" : scoreColor(area.score),
+                        fillColor: scoreColor(area.score),
+                        fillOpacity: 0.78,
+                        weight: selected?.geography_id === area.geography_id ? 3 : 1.5,
+                      }}
+                      eventHandlers={{ click: () => setSelected(area) }}
+                    >
+                      <Popup>
+                        <div className="min-w-[190px]">
+                          <p className="font-bold">{area.geography_name}</p>
+                          <p className="mt-1 text-xs text-slate-500">Score {area.score} · {area.metrics?.priority_level}</p>
+                          <p className="mt-2 text-xs">Stop density: <b>{area.stop_density}</b></p>
+                          <p className="text-xs">Median income: <b>${formatNumber(area.median_income)}</b></p>
+                        </div>
+                      </Popup>
+                    </CircleMarker>
+                  );
+                })}
+              </MapContainer>
+            )}
           </div>
         </Card>
 
-        {/* Right panel */}
-        <div className="flex flex-col gap-4">
-          {/* Legend card */}
-          <Card>
-            <CardHeader title="Score Legend" />
-            <div className="p-4 space-y-2.5">
-              {[
-                { label: "High (75–100)",  color: "#19b159", desc: "Well-served" },
-                { label: "Medium (55–74)", color: "#f7b731", desc: "Average access" },
-                { label: "Low (40–54)",    color: "#eb6f33", desc: "Below average" },
-                { label: "Critical (<40)", color: "#f5334f", desc: "Underserved" },
-              ].map((l) => (
-                <div key={l.label} className="flex items-center gap-3">
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ background: l.color, boxShadow: `0 0 0 3px ${l.color}33` }}
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <p className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>{l.label}</p>
-                    <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>{l.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Selected neighbourhood detail */}
-          {selected ? (
-            <Card>
-              <CardHeader
-                title={selected.name}
-                subtitle="Neighbourhood detail"
-                action={
-                  <button onClick={() => setSelected(null)} aria-label="Close" className="w-6 h-6 rounded-full flex items-center justify-center text-sm transition-colors hover:bg-gray-100" style={{ color: "var(--text-muted)" }}>✕</button>
-                }
-              />
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[28px] font-bold text-gradient">{selected.equityScore}</span>
-                  <div>
-                    <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>/ 100 equity score</p>
-                    <Badge color={scoreBadge(selected.equityScore)}>
-                      {selected.equityScore >= 75 ? "High" : selected.equityScore >= 55 ? "Medium" : selected.equityScore >= 40 ? "Low" : "Critical"}
-                    </Badge>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                <div className="progress-bar mb-4">
-                  <div className="progress-fill" style={{ width: `${selected.equityScore}%`, background: `linear-gradient(to right, ${scoreColor(selected.equityScore)}, ${scoreColor(selected.equityScore)}aa)` }} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <Card>
+          <CardHeader title="Selected Area" subtitle="Raw Part 6 metrics" />
+          <div className="p-4">
+            {selected ? (
+              <div>
+                <Badge color={selected.score < 40 ? "red" : selected.score < 65 ? "amber" : "green"}>{selected.score} score</Badge>
+                <h3 className="mt-4 text-xl font-extrabold">{selected.geography_name}</h3>
+                <div className="mt-4 grid gap-3">
                   {[
-                    ["Median Income", `$${selected.income.toLocaleString()}`],
-                    ["Stop Density",  `${selected.stopDensity}/km²`],
-                    ["Senior Pop.",   `${selected.seniorPct}%`],
-                    ["Disability",    `${selected.disabilityPct}%`],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-lg p-2.5" style={{ background: "var(--body-bg)" }}>
-                      <p style={{ color: "var(--text-muted)" }}>{k}</p>
-                      <p className="font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</p>
+                    ["Stop density", selected.stop_density],
+                    ["Ridership per capita", selected.ridership_per_capita],
+                    ["Median income", `$${formatNumber(selected.median_income)}`],
+                    ["Vulnerable share", `${selected.vulnerable_share}%`],
+                    ["Distance to stop", `${selected.distance_to_stop}m`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between rounded-xl bg-[var(--panel-soft)] px-3 py-2">
+                      <span className="text-xs text-[var(--muted)]">{label}</span>
+                      <b className="text-sm">{value}</b>
                     </div>
                   ))}
                 </div>
-                {selected.equityScore < 50 && (
-                  <div className="mt-3">
-                    <InfoTag color="danger">⚠ Underserved — priority for service improvement</InfoTag>
-                  </div>
-                )}
               </div>
-            </Card>
-          ) : (
-            <Card>
-              <div className="p-6 text-center">
-                <div className="w-10 h-10 rounded-xl mx-auto mb-2 flex items-center justify-center text-lg"
-                  style={{ background: "var(--primary-01)", color: "var(--primary)" }}>⚖</div>
-                <p className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>Select a neighbourhood</p>
-                <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>Click a map marker to view equity details</p>
-              </div>
-            </Card>
-          )}
-
-          {/* Route equity bars */}
-          <Card>
-            <CardHeader title="Route Equity Scores" subtitle="By transit line" />
-            <div className="p-4">
-              <ResponsiveContainer width="100%" height={160}>
-                <BarChart data={equityRoutes} layout="vertical" margin={{ top: 0, right: 8, left: 65, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f6" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fill: "#a8afc7", fontSize: 10, fontFamily: "Poppins" }} />
-                  <YAxis type="category" dataKey="name" tick={{ fill: "#7b8191", fontSize: 9, fontFamily: "Poppins" }} width={65} />
-                  <Tooltip {...CHART_TOOLTIP} formatter={(v) => [`${v}/100`, "Score"]} />
-                  <Bar dataKey="score" radius={[0, 4, 4, 0]}>
-                    {equityRoutes.map((r) => <Cell key={r.id} fill={scoreColor(r.score)} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        </div>
+            ) : (
+              <p className="text-sm text-[var(--muted)]">Select a point on the map or row below.</p>
+            )}
+          </div>
+        </Card>
       </div>
 
-      {/* ── Neighbourhood table ─────────────────────── */}
-      <Card className="mt-4">
-        <CardHeader
-          title="Neighbourhood Summary"
-          subtitle="All zones ranked by equity score"
-          action={<Badge color="muted">{filtered.length} records</Badge>}
-        />
-        <div className="overflow-x-auto">
-          <table className="tl-table">
-            <thead>
-              <tr>
-                <th className="text-left">Neighbourhood</th>
-                <th>Equity Score</th>
-                <th>Med. Income</th>
-                <th>Seniors %</th>
-                <th>Disability %</th>
-                <th>Stop Density</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[...filtered].sort((a, b) => a.equityScore - b.equityScore).map((n) => (
-                <tr
-                  key={n.id}
-                  className="cursor-pointer"
-                  onClick={() => setSelected(n)}
-                  style={selected?.id === n.id ? { background: "var(--primary-01)" } : {}}
-                >
-                  <td className="font-medium">{n.name}</td>
-                  <td className="text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="progress-bar w-16 flex-shrink-0">
-                        <div className="progress-fill" style={{ width: `${n.equityScore}%`, background: scoreColor(n.equityScore) }} />
-                      </div>
-                      <span className="font-semibold text-[12px]" style={{ color: scoreColor(n.equityScore) }}>{n.equityScore}</span>
-                    </div>
-                  </td>
-                  <td className="text-center">${n.income.toLocaleString()}</td>
-                  <td className="text-center">{n.seniorPct}%</td>
-                  <td className="text-center">{n.disabilityPct}%</td>
-                  <td className="text-center">{n.stopDensity}</td>
-                  <td className="text-center">
-                    <Badge color={scoreBadge(n.equityScore)}>
-                      {n.equityScore >= 75 ? "High" : n.equityScore >= 55 ? "Medium" : n.equityScore >= 40 ? "Low" : "Critical"}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader title="Score Ranking" subtitle="Current sort order" />
+          <div className="card-pad">
+            <ResponsiveContainer width="100%" height={310}>
+              <BarChart data={chartRows} layout="vertical" margin={{ left: 112, right: 12 }}>
+                <CartesianGrid stroke="#edf0f7" strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6f7a8d" }} />
+                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 10, fill: "#6f7a8d" }} />
+                <Tooltip {...chartTooltip} />
+                <Bar dataKey="score" radius={[0, 6, 6, 0]}>
+                  {chartRows.map((row) => <Cell key={row.name} fill={scoreColor(row.score)} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader title="Neighbourhood Table" subtitle="Click a row to inspect" />
+          <div className="max-h-[360px] overflow-auto">
+            <table className="table">
+              <thead><tr><th>Area</th><th>Score</th><th>Income</th><th>Stop dist.</th></tr></thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.geography_id} onClick={() => setSelected(row)} className="cursor-pointer">
+                    <td className="font-bold">{row.geography_name}</td>
+                    <td><Badge color={row.score < 40 ? "red" : row.score < 65 ? "amber" : "green"}>{row.score}</Badge></td>
+                    <td>${formatNumber(row.median_income)}</td>
+                    <td>{row.distance_to_stop}m</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </section>
   );
 }

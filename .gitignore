@@ -11,6 +11,11 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.venv
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +27,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Runtime GTFS/backend artifacts
+data/gtfs/*.zip
+data/gtfs/archives/
+data/gtfs/extracted/
+data/ridership/
+data/bikeshare/
+data/equity/
+data/logs/
+downloads/
