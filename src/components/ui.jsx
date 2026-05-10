@@ -1,227 +1,89 @@
-/* ─────────────────────────────────────────────────────────
-   Shared UI primitives — Spruha-style design system
-   ───────────────────────────────────────────────────────── */
-
-// ── Card ─────────────────────────────────────────────────
-export function Card({ children, className = "", hover = false, style = {} }) {
-  return (
-    <div
-      className={`bg-white rounded-[var(--card-radius)] ${hover ? "card-hover" : ""} ${className}`}
-      style={{
-        boxShadow: "var(--card-shadow)",
-        border: "1px solid var(--border-color)",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
+export function Icon({ name, size, className = "w-4 h-4" }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" };
+  const paths = {
+    dashboard: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+    map: <><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z" /><path d="M9 3v15M15 6v15" /></>,
+    chart: <><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-7" /></>,
+    equity: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></>,
+    bolt: <path d="M13 2L4 14h7l-1 8 10-13h-7l1-7z" />,
+    gap: <><circle cx="12" cy="12" r="9" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" /><path d="M10 20a2 2 0 0 0 4 0" /></>,
+    route: <><path d="M6 3v4a4 4 0 0 0 4 4h4a4 4 0 0 1 4 4v6" /><circle cx="6" cy="3" r="2" /><circle cx="18" cy="21" r="2" /></>,
+    "map-pin": <><path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11z" /><circle cx="12" cy="10" r="2.4" /></>,
+    people: <><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.7M16 3.2a4 4 0 0 1 0 7.6" /></>,
+    stop: <><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2" /></>,
+  };
+  return <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden="true" {...common}>{paths[name] || paths.dashboard}</svg>;
 }
 
-// ── Card Header ──────────────────────────────────────────
-export function CardHeader({ title, subtitle, action, icon, iconBg }) {
+export function Card({ children, className = "" }) {
+  return <section className={`card ${className}`}>{children}</section>;
+}
+
+export function CardHeader({ title, subtitle, action }) {
   return (
-    <div
-      className="flex items-start justify-between px-5 pt-4 pb-3"
-      style={{ borderBottom: "1px solid var(--border-color)" }}
-    >
-      <div className="flex items-center gap-3">
-        {icon && (
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
-            style={{ background: iconBg || "var(--primary)" }}
-            aria-hidden="true"
-          >
-            {icon}
-          </div>
-        )}
-        <div>
-          <p className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>{title}</p>
-          {subtitle && <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
-        </div>
+    <div className="card-header">
+      <div>
+        <h3 className="text-[14px] font-bold text-[var(--ink)]">{title}</h3>
+        {subtitle && <p className="mt-1 text-[12px] text-[var(--muted)]">{subtitle}</p>}
       </div>
-      {action && <div className="shrink-0 ml-3">{action}</div>}
+      {action}
     </div>
   );
 }
 
-// ── Stat Card (KPI card) ──────────────────────────────────
-export function StatCard({ label, value, unit, change, changePct, icon, color, gradient }) {
-  const gradients = {
-    primary:   "linear-gradient(135deg, #6259ca, #8780e0)",
-    secondary: "linear-gradient(135deg, #eb6f33, #f5a623)",
-    success:   "linear-gradient(135deg, #19b159, #47d27b)",
-    info:      "linear-gradient(135deg, #4ec2f0, #1da9e0)",
-    warning:   "linear-gradient(135deg, #f7b731, #fbd170)",
-    danger:    "linear-gradient(135deg, #f5334f, #ff6b7a)",
-    teal:      "linear-gradient(135deg, #00b9b9, #00d8d8)",
-  };
-  const bg = gradient || gradients[color] || gradients.primary;
-
-  return (
-    <div
-      className="card-hover rounded-[var(--card-radius)] p-5 text-white relative overflow-hidden"
-      style={{ background: bg, boxShadow: `0 8px 24px ${getGlowColor(color)}` }}
-    >
-      {/* Decorative circles */}
-      <span className="absolute -right-4 -top-4 w-20 h-20 rounded-full bg-white/10" aria-hidden="true" />
-      <span className="absolute -right-1 top-8 w-12 h-12 rounded-full bg-white/10" aria-hidden="true" />
-
-      <div className="flex items-start justify-between relative z-10">
-        <div>
-          <p className="text-white/70 text-[11px] font-medium uppercase tracking-[0.8px] mb-1">{label}</p>
-          <p className="text-[28px] font-bold leading-tight">
-            {typeof value === "number" ? value.toLocaleString() : value}
-            {unit && <span className="text-[14px] font-medium ml-1 opacity-80">{unit}</span>}
-          </p>
-          {(change !== undefined || changePct !== undefined) && (
-            <p className="text-[11px] mt-1.5 text-white/70">
-              {changePct !== undefined && (
-                <span className={`font-semibold text-white ${changePct >= 0 ? "text-white" : "text-red-200"}`}>
-                  {changePct >= 0 ? "▲" : "▼"} {Math.abs(changePct)}%{" "}
-                </span>
-              )}
-              {change}
-            </p>
-          )}
-        </div>
-        {icon && (
-          <div className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0 text-white">
-            {icon}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function getGlowColor(color) {
-  const map = {
-    primary:   "rgba(98,89,202,0.28)",
-    secondary: "rgba(235,111,51,0.28)",
-    success:   "rgba(25,177,89,0.28)",
-    info:      "rgba(78,194,240,0.28)",
-    warning:   "rgba(247,183,49,0.28)",
-    danger:    "rgba(245,51,79,0.28)",
-    teal:      "rgba(0,185,185,0.28)",
-  };
-  return map[color] || "rgba(98,89,202,0.2)";
-}
-
-// ── Badge ────────────────────────────────────────────────
-export function Badge({ children, color = "primary" }) {
-  const styles = {
-    primary:   { background: "var(--primary-01)",           color: "var(--primary)" },
-    success:   { background: "rgba(25,177,89,0.1)",         color: "var(--success)" },
-    danger:    { background: "rgba(245,51,79,0.1)",         color: "var(--danger)" },
-    warning:   { background: "rgba(247,183,49,0.1)",        color: "#c88c00" },
-    info:      { background: "rgba(78,194,240,0.1)",        color: "#1a8fb8" },
-    secondary: { background: "rgba(235,111,51,0.1)",        color: "var(--secondary)" },
-    teal:      { background: "rgba(0,185,185,0.1)",         color: "#008080" },
-    muted:     { background: "var(--body-bg)",              color: "var(--text-muted)", border: "1px solid var(--border-color)" },
-  };
-  return (
-    <span className="badge-pill" style={styles[color] || styles.primary}>
-      {children}
-    </span>
-  );
-}
-
-// ── Button ───────────────────────────────────────────────
-export function Btn({ children, variant = "primary", size = "md", onClick, className = "", disabled = false }) {
-  const base = "inline-flex items-center gap-1.5 font-medium rounded-lg transition-all duration-150 border cursor-pointer disabled:opacity-60";
-  const sizes = {
-    sm: "px-3 py-1 text-[11px]",
-    md: "px-4 py-2 text-[12px]",
-    lg: "px-5 py-2.5 text-[13px]",
-  };
-  const variants = {
-    primary:   "text-white border-transparent",
-    outline:   "bg-transparent",
-    ghost:     "border-transparent bg-transparent",
-  };
-
-  const inlineStyle = variant === "primary"
-    ? { background: "linear-gradient(135deg, var(--primary), var(--primary-light))", boxShadow: "0 4px 14px rgba(98,89,202,0.3)" }
-    : variant === "outline"
-    ? { borderColor: "var(--primary)", color: "var(--primary)", background: "transparent" }
-    : { color: "var(--primary)", borderColor: "transparent", background: "var(--primary-01)" };
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
-      style={inlineStyle}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ── Section Page Header ──────────────────────────────────
 export function PageHeader({ title, subtitle, action }) {
   return (
-    <div className="flex items-start justify-between mb-5">
+    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div>
-        <h2 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>{title}</h2>
-        {subtitle && <p className="text-[12px] mt-0.5" style={{ color: "var(--text-muted)" }}>{subtitle}</p>}
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]">TransitLens</p>
+        <h2 className="text-2xl font-extrabold tracking-tight text-[var(--ink)]">{title}</h2>
+        {subtitle && <p className="mt-2 max-w-3xl text-sm text-[var(--muted)]">{subtitle}</p>}
       </div>
-      {action && <div>{action}</div>}
+      {action}
     </div>
   );
 }
 
-// ── Filter Pill Group ─────────────────────────────────────
-export function PillGroup({ options, value, onChange }) {
-  return (
-    <div className="toggle-group" role="group">
-      {options.map((opt) => (
-        <button
-          key={opt}
-          className={`toggle-btn ${value === opt ? "active" : ""}`}
-          onClick={() => onChange(opt)}
-          aria-pressed={value === opt}
-        >
-          {opt}
-        </button>
-      ))}
-    </div>
-  );
+export function Badge({ children, color = "brand" }) {
+  return <span className={`badge ${color}`}>{children}</span>;
 }
 
-// ── Empty State ──────────────────────────────────────────
-export function EmptyState({ icon, title, body }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div
-        className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-3"
-        style={{ background: "var(--primary-01)", color: "var(--primary)" }}
-        aria-hidden="true"
-      >
-        {icon}
-      </div>
-      <p className="text-[13px] font-semibold mb-1" style={{ color: "var(--text-primary)" }}>{title}</p>
-      <p className="text-[11px] max-w-[200px]" style={{ color: "var(--text-muted)" }}>{body}</p>
-    </div>
-  );
-}
-
-// ── Tooltip-style info tag ───────────────────────────────
-export function InfoTag({ children, color = "primary" }) {
-  const colors = {
-    primary: { bg: "var(--primary-01)",         text: "var(--primary)",   border: "var(--primary-02)" },
-    success: { bg: "rgba(25,177,89,0.08)",       text: "var(--success)",   border: "rgba(25,177,89,0.2)" },
-    danger:  { bg: "rgba(245,51,79,0.08)",       text: "var(--danger)",    border: "rgba(245,51,79,0.2)" },
-    warning: { bg: "rgba(247,183,49,0.08)",      text: "#c88c00",          border: "rgba(247,183,49,0.25)" },
+export function KPI({ label, value, hint, icon, tone = "brand" }) {
+  const gradients = {
+    brand: "linear-gradient(135deg, #6259ca, #756df0)",
+    blue: "linear-gradient(135deg, #2563eb, #38bdf8)",
+    green: "linear-gradient(135deg, #16a36b, #22c55e)",
+    amber: "linear-gradient(135deg, #e7a21a, #f97316)",
+    teal: "linear-gradient(135deg, #119e9a, #15c6b7)",
+    red: "linear-gradient(135deg, #e5484d, #f97373)",
+    purple: "linear-gradient(135deg, #7c3aed, #a855f7)",
+    slate: "linear-gradient(135deg, #334155, #64748b)",
   };
-  const c = colors[color] || colors.primary;
   return (
-    <div
-      className="flex items-start gap-2 rounded-lg px-3 py-2 text-[11px] font-medium"
-      style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
-    >
-      {children}
+    <div className="kpi" style={{ background: gradients[tone] || gradients.brand }}>
+      <div className="relative z-10 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/70">{label}</p>
+          <p className="mt-2 text-3xl font-extrabold tracking-tight">{value}</p>
+          {hint && <p className="mt-2 text-xs text-white/72">{hint}</p>}
+        </div>
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/18">{icon}</div>
+      </div>
     </div>
+  );
+}
+
+export function Skeleton({ className = "" }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+export function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">{label}</span>
+      {children}
+    </label>
   );
 }

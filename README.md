@@ -71,6 +71,8 @@ Synthetic ridership data is generated using realistic Gaussian demand curves anc
 
 - Node.js >= 18
 - npm >= 9
+- Python >= 3.11 for the GTFS backend
+- Docker Desktop, or a local PostgreSQL 16 + PostGIS installation
 
 ### Steps
 
@@ -87,6 +89,75 @@ npm run dev
 ```
 
 Open http://localhost:5173 in your browser.
+
+### Phase 1 GTFS Backend
+
+The backend ingestion pipeline lives under `backend/` and loads the TTC static GTFS feed into a PostgreSQL/PostGIS database named `transitlens`.
+
+```powershell
+# Set up Python dependencies, PostGIS, and database schema
+.\backend\scripts\setup.ps1
+
+# Download the latest TTC GTFS feed, extract, load, spatialize, and validate
+.\backend\scripts\ingest.ps1 -Download -ForceDownload -Strict
+```
+
+See `backend/docs/PHASE1_GTFS_BACKEND.md` for schema details, validation checks, and monthly automation setup.
+
+### Phase 2 Ridership Backend
+
+```powershell
+.\backend\scripts\ingest_ridership.ps1 -ForceDownload -Strict
+.\backend\scripts\validate_ridership.ps1
+```
+
+See `backend/docs/PHASE2_RIDERSHIP_BACKEND.md` for workbook parsing rules and validation details.
+
+Optional yearly refresh:
+
+```powershell
+.\backend\scripts\register_ridership_yearly_task.ps1
+```
+
+### Phase 3 Bike Share Backend
+
+```powershell
+# Test or refresh a specific year
+.\backend\scripts\ingest_bikeshare.ps1 -Years "2026" -ForceDownload -Strict
+
+# Validate Bike Share tables
+.\backend\scripts\validate_bikeshare.ps1
+```
+
+See `backend/docs/PHASE3_BIKESHARE_BACKEND.md` for full historical ingestion and QA details.
+
+### Backend API
+
+```powershell
+.\backend\scripts\run_api.ps1
+```
+
+Open http://127.0.0.1:8000/docs for the FastAPI OpenAPI UI.
+
+See `backend/docs/PHASE4_API_BACKEND.md` for endpoint details.
+
+Additional backend modules:
+
+```powershell
+# Build and validate generated transit equity priority areas
+.\backend\scripts\build_equity.ps1
+.\backend\scripts\validate_equity.ps1
+
+# Train the ridership prediction model used by the API
+.\backend\scripts\train_prediction_model.ps1
+
+# Optional Redis cache for repeated API queries
+.\backend\scripts\start_redis.ps1
+```
+
+See `backend/docs/PHASE5_RIDERSHIP_ML.md` for model features, evaluation metrics, registry tables, and monitoring details.
+See `backend/docs/PHASE6_EQUITY_SCORING.md` for neighbourhood boundary imports, demographic joins, scoring weights, and scheduled recalculation.
+See `backend/docs/PHASE7_DISRUPTION_SIMULATION.md` for graph building, OD path simulation, and passenger-impact estimates.
 
 ### Build for production
 

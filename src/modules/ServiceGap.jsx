@@ -1,284 +1,219 @@
-import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import { fetchGapZones, fetchCoverageStats } from "../api/client";
-import { Card, CardHeader, Badge, PageHeader, StatCard, InfoTag } from "../components/ui";
+import { useMemo, useState } from "react";
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip, Polyline } from "react-leaflet";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { api, formatNumber } from "../services/api";
+import { useApi } from "../hooks/useApi";
+import { Badge, Card, CardHeader, Field, Icon, KPI, PageHeader, Skeleton } from "../components/ui";
+import { chartTooltip } from "../components/chartConfig";
 
-const TORONTO = [43.7500, -79.3800];
+const TORONTO = [43.6532, -79.3832];
 
-function gapColor(s) {
-  if (s >= 85) return "#f5334f";
-  if (s >= 75) return "#eb6f33";
-  return "#f7b731";
+const routeTypeLabel = {
+  0: "Streetcar",
+  1: "Subway",
+  2: "Rail",
+  3: "Bus",
+};
+
+const typeColor = {
+  0: "#d946ef",
+  1: "#2563eb",
+  2: "#0891b2",
+  3: "#16a34a",
+};
+
+function routeLabel(route) {
+  if (!route) return "Select route";
+  return `${route.route_short_name || route.route_id} - ${route.route_long_name || "TTC route"}`;
 }
 
-function Skeleton({ h = "h-8", w = "w-full" }) {
-  return <div className={`${h} ${w} rounded-lg animate-pulse`} style={{ background: "#e8e8f7" }} />;
+function serviceMetrics(route, stops) {
+  const stopCount = stops?.length || 0;
+  const shapePoints = route?.shape?.length || 0;
+  return [
+    { label: "Nearby Stops", value: formatNumber(stopCount), tone: "green" },
+    { label: "Shape Points", value: formatNumber(shapePoints), tone: "blue" },
+    { label: "Route Type", value: routeTypeLabel[route?.route_type] || "TTC", tone: "purple" },
+  ];
 }
 
 export default function ServiceGap() {
-  const [showProposed, setShowProposed] = useState(false);
-  const [selected,     setSelected]     = useState(null);
-  const [zones,        setZones]        = useState([]);
-  const [coverage,     setCoverage]     = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [apiLive,      setApiLive]      = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState("504");
+  const [center, setCenter] = useState(TORONTO);
+  const [layers, setLayers] = useState({ route: true, stops: true });
 
-  useEffect(() => {
-    Promise.all([fetchGapZones(), fetchCoverageStats()]).then(([z, c]) => {
-      setZones(z);
-      setCoverage(c);
-      setApiLive(z.length > 0 && z[0].equityScore !== undefined);
-      setLoading(false);
-    });
-  }, []);
+  const routes = useApi(api.routes, []);
+  const routeDetail = useApi(() => api.route(selectedRouteId), [selectedRouteId]);
+  const nearbyStops = useApi(() => api.stopsNear({ lat: center[0], lon: center[1], radius: 1800, limit: 140 }), [center]);
 
-  const totalBenefit = zones.reduce((a, b) => a + (b.estimatedBenefit ?? 0), 0);
-  const totalPop     = zones.reduce((a, b) => a + (b.population       ?? 0), 0);
+  const routeOptions = useMemo(() => {
+    const list = routes.data || [];
+    return [...list]
+      .sort((a, b) => String(a.route_short_name || a.route_id).localeCompare(String(b.route_short_name || b.route_id), undefined, { numeric: true }))
+      .slice(0, 220);
+  }, [routes.data]);
+
+  const selectedRoute = routeDetail.data;
+  const shape = selectedRoute?.shape || [];
+  const routeColor = typeColor[selectedRoute?.route_type] || "#2563eb";
+  const metrics = serviceMetrics(selectedRoute, nearbyStops.data);
+
+  const stopDensityData = useMemo(() => {
+    const stops = nearbyStops.data || [];
+    const buckets = stops.reduce((acc, stop) => {
+      const key = stop.zone_id || "unassigned";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(buckets)
+      .map(([zone, count]) => ({ zone, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [nearbyStops.data]);
+
+  const onRouteChange = (value) => {
+    setSelectedRouteId(value);
+  };
 
   return (
-    <section aria-label="Service Gap Analysis">
+    <section aria-label="Network map">
       <PageHeader
-        title="Service Gap Analysis"
-        subtitle="Identifies underserved areas by stop density vs population, and models proposed improvements"
-        action={
-          <div className="flex items-center gap-2">
-            <Badge color={apiLive ? "success" : "warning"}>{apiLive ? "🟢 Live API" : "⚠ Mock data"}</Badge>
-            <div className="toggle-group">
-              <button className={`toggle-btn ${!showProposed ? "active" : ""}`} onClick={() => setShowProposed(false)} aria-pressed={!showProposed}>Current Gaps</button>
-              <button
-                className={`toggle-btn ${showProposed ? "active" : ""}`}
-                onClick={() => setShowProposed(true)}
-                aria-pressed={showProposed}
-                style={showProposed ? { background: "#19b159", boxShadow: "0 4px 12px rgba(25,177,89,0.3)" } : {}}
-              >
-                With Proposals
-              </button>
-            </div>
-          </div>
-        }
+        eyebrow="Live GTFS network"
+        title="Network Map"
+        subtitle="Inspect TTC routes, geometry, and nearby stop coverage directly from the PostGIS-backed API."
+        action={<Badge color={routes.error ? "red" : "green"}>{routes.error ? "API issue" : "Live feed"}</Badge>}
       />
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-        {loading ? Array(4).fill(0).map((_, i) => (
-          <div key={i} className="rounded-[var(--card-radius)] p-5" style={{ background: "#e8e8f7" }}>
-            <Skeleton h="h-4" w="w-24" /><Skeleton h="h-8" w="w-32" />
-          </div>
-        )) : <>
-          <StatCard label="Gap Zones"        value={zones.length}                      color="danger"    change="Priority areas" />
-          <StatCard label="Total Population" value={totalPop.toLocaleString()}          color="primary"   change="Underserved residents" />
-          <StatCard label="Proposed Stops"   value={zones.length}                      color="success"   change={showProposed ? "Shown on map" : "Toggle to preview"} />
-          <StatCard label="Est. New Riders"  value={Math.round(totalBenefit).toLocaleString()} color="info" change="Daily from proposals" changePct={showProposed ? 14.5 : undefined} />
-        </>}
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        {/* Map */}
-        <Card className="xl:col-span-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]">
+        <Card className="overflow-hidden">
           <CardHeader
-            title={showProposed ? "Gap Zones + Proposed Stops" : "Current Service Gap Zones"}
-            subtitle="Size = population · Colour = gap severity · Click for details"
-            action={loading ? null : showProposed ? <Badge color="success">Proposals active</Badge> : <Badge color="danger">{zones.length} gaps</Badge>}
-          />
-          <div style={{ height: 460 }}>
-            {loading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
+            title={routeLabel(selectedRoute)}
+            subtitle="Route geometry and nearby stops"
+            action={
+              <div className="flex items-center gap-2">
+                <button
+                  className={`button-ghost ${layers.route ? "text-slate-950" : "text-slate-400"}`}
+                  onClick={() => setLayers((value) => ({ ...value, route: !value.route }))}
+                  type="button"
+                >
+                  <Icon name="route" size={16} />
+                  Route
+                </button>
+                <button
+                  className={`button-ghost ${layers.stops ? "text-slate-950" : "text-slate-400"}`}
+                  onClick={() => setLayers((value) => ({ ...value, stops: !value.stops }))}
+                  type="button"
+                >
+                  <Icon name="map-pin" size={16} />
+                  Stops
+                </button>
               </div>
-            ) : (
-              <MapContainer center={TORONTO} zoom={11} style={{ height: "100%", width: "100%", borderRadius: "0 0 0.75rem 0.75rem" }} aria-label="Service gap map">
-                <TileLayer
-                  attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                {/* Gap zones */}
-                {zones.map((z) => (
-                  <CircleMarker
-                    key={z.id}
-                    center={[z.lat, z.lng]}
-                    radius={20}
-                    pathOptions={{
-                      fillColor: gapColor(z.gapScore),
-                      fillOpacity: 0.45,
-                      color: selected?.id === z.id ? "#1a1c2e" : gapColor(z.gapScore),
-                      weight: selected?.id === z.id ? 3 : 1.5,
-                    }}
-                    eventHandlers={{ click: () => setSelected(z) }}
-                  >
-                    <MapTooltip direction="top" offset={[0, -14]} opacity={0.95}>
-                      <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12 }}>
-                        <strong>{z.name}</strong><br />
-                        Gap Score: <strong style={{ color: gapColor(z.gapScore) }}>{z.gapScore}/100</strong><br />
-                        Pop: {z.population.toLocaleString()}
-                      </div>
-                    </MapTooltip>
-                    <Popup>
-                      <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12, minWidth: 160 }}>
-                        <p style={{ fontWeight: 700, marginBottom: 5 }}>{z.name}</p>
-                        <table style={{ borderCollapse: "collapse", width: "100%" }}>
-                          {[
-                            ["Gap Score",    `${z.gapScore}/100`],
-                            ["Equity Score", `${z.equityScore ?? "—"}/100`],
-                            ["Population",   z.population.toLocaleString()],
-                            ["Stop Density", `${z.stopDensity}/km²`],
-                          ].map(([k, v]) => (
-                            <tr key={k}><td style={{ color: "#7b8191", paddingRight: 8, paddingBottom: 3 }}>{k}</td><td style={{ fontWeight: 600 }}>{v}</td></tr>
-                          ))}
-                        </table>
-                      </div>
-                    </Popup>
-                  </CircleMarker>
-                ))}
+            }
+          />
 
-                {/* Proposed stops */}
-                {showProposed && zones.map((z) => z.proposedStop && (
+          <div className="map-frame">
+            <MapContainer center={TORONTO} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
+              <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+              {layers.route && shape.length > 1 && (
+                <Polyline positions={shape} pathOptions={{ color: routeColor, weight: 5, opacity: 0.88, lineCap: "round" }}>
+                  <Popup>
+                    <strong>{routeLabel(selectedRoute)}</strong>
+                    <br />
+                    {shape.length.toLocaleString()} shape points
+                  </Popup>
+                </Polyline>
+              )}
+
+              {layers.stops &&
+                (nearbyStops.data || []).map((stop) => (
                   <CircleMarker
-                    key={`p-${z.id}`}
-                    center={[z.proposedStop.lat, z.proposedStop.lng]}
-                    radius={9}
-                    pathOptions={{ fillColor: "#19b159", fillOpacity: 1, color: "#fff", weight: 2.5 }}
+                    key={stop.stop_id}
+                    center={[stop.stop_lat, stop.stop_lon]}
+                    radius={5}
+                    pathOptions={{ color: "#ffffff", weight: 2, fillColor: "#0f172a", fillOpacity: 0.9 }}
+                    eventHandlers={{ click: () => setCenter([stop.stop_lat, stop.stop_lon]) }}
                   >
-                    <MapTooltip direction="top" offset={[0, -10]} opacity={0.95}>
-                      <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12 }}>
-                        <strong style={{ color: "#19b159" }}>{z.proposedStop.name}</strong><br />
-                        Est. new riders: <strong>+{Math.round(z.estimatedBenefit).toLocaleString()}/day</strong>
-                      </div>
+                    <MapTooltip direction="top" offset={[0, -6]} opacity={0.96}>
+                      <strong>{stop.stop_name}</strong>
+                      <br />
+                      {stop.stop_id}
                     </MapTooltip>
                     <Popup>
-                      <div style={{ fontFamily: "Poppins, sans-serif", fontSize: 12, minWidth: 150 }}>
-                        <p style={{ fontWeight: 700, color: "#19b159", marginBottom: 4 }}>{z.proposedStop.name}</p>
-                        <p>Est. new daily riders: <strong>+{Math.round(z.estimatedBenefit).toLocaleString()}</strong></p>
-                      </div>
+                      <strong>{stop.stop_name}</strong>
+                      <br />
+                      Stop {stop.stop_id}
                     </Popup>
                   </CircleMarker>
                 ))}
-              </MapContainer>
-            )}
+            </MapContainer>
           </div>
         </Card>
 
-        {/* Right panel */}
-        <div className="flex flex-col gap-4">
-          {/* Before / After coverage */}
+        <div className="space-y-4">
           <Card>
-            <CardHeader title="Coverage Impact" subtitle={showProposed ? "With proposed stops" : "Current baseline"} />
-            <div className="p-4 space-y-3">
-              {loading || !coverage ? Array(3).fill(0).map((_, i) => <Skeleton key={i} h="h-16" />) : [
-                { label: "Population Covered", before: coverage.before.population_covered_pct, after: coverage.after.population_covered_pct, unit: "%",    higherIsBetter: true  },
-                { label: "Avg Walk to Stop",   before: coverage.before.avg_walk_to_stop_min,   after: coverage.after.avg_walk_to_stop_min,   unit: " min", higherIsBetter: false },
-                { label: "Stops per km²",      before: coverage.before.stops_per_km2,          after: coverage.after.stops_per_km2,          unit: "",     higherIsBetter: true  },
-              ].map((m) => {
-                const delta    = m.after - m.before;
-                const positive = m.higherIsBetter ? delta > 0 : delta < 0;
-                const shown    = showProposed ? m.after : m.before;
-                return (
-                  <div key={m.label} className="rounded-xl p-3" style={{ background: "var(--body-bg)", border: "1px solid var(--border-color)" }}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{m.label}</p>
-                      {showProposed && (
-                        <span className={`text-[10px] font-bold ${positive ? "text-green-600" : "text-red-500"}`}>
-                          {positive ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}{m.unit}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-end gap-2 mt-1">
-                      {showProposed && <span className="text-[11px] line-through" style={{ color: "var(--text-light)" }}>{m.before}{m.unit}</span>}
-                      <span className="text-[18px] font-bold" style={{ color: "var(--text-primary)" }}>{typeof shown === "number" ? shown.toFixed(1) : shown}{m.unit}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {showProposed && coverage && (
-              <div className="px-4 pb-4">
-                <InfoTag color="success">
-                  ✓ Proposals improve coverage by +{(coverage.after.population_covered_pct - coverage.before.population_covered_pct).toFixed(1)} pp
-                </InfoTag>
-              </div>
-            )}
-          </Card>
-
-          {/* Priority list */}
-          <Card>
-            <CardHeader title="Priority Gap Zones" subtitle="Ranked by gap score" action={<Badge color="danger">{zones.length} zones</Badge>} />
-            <div>
-              {loading ? Array(4).fill(0).map((_, i) => (
-                <div key={i} className="px-4 py-3" style={{ borderBottom: "1px solid var(--border-color)" }}>
-                  <Skeleton h="h-10" />
-                </div>
-              )) : [...zones]
-                .sort((a, b) => b.gapScore - a.gapScore)
-                .map((z, i) => (
-                  <button
-                    key={z.id}
-                    onClick={() => setSelected(z)}
-                    className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-[#fafafe]"
-                    style={{
-                      borderBottom: i < zones.length - 1 ? "1px solid var(--border-color)" : "none",
-                      background: selected?.id === z.id ? "var(--primary-01)" : "transparent",
-                    }}
-                  >
-                    <span
-                      className="shrink-0 mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-[9px]"
-                      style={{ background: gapColor(z.gapScore) }}
-                    >
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>{z.name}</p>
-                      <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-                        Gap {z.gapScore}/100 · {z.population.toLocaleString()} residents
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-[11px] font-bold" style={{ color: gapColor(z.gapScore) }}>{z.gapScore}</span>
-                  </button>
-                ))
-              }
-            </div>
-          </Card>
-
-          {/* Selected zone detail */}
-          {selected && (
-            <Card>
-              <CardHeader
-                title={selected.name}
-                subtitle="Zone detail"
-                action={
-                  <button onClick={() => setSelected(null)} className="w-6 h-6 rounded-full flex items-center justify-center text-sm hover:bg-gray-100" style={{ color: "var(--text-muted)" }}>✕</button>
-                }
-              />
-              <div className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[28px] font-bold" style={{ color: gapColor(selected.gapScore) }}>{selected.gapScore}</span>
-                  <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>/ 100<br />Gap Score</p>
-                </div>
-                <div className="progress-bar mb-4">
-                  <div className="progress-fill" style={{ width: `${selected.gapScore}%`, background: `linear-gradient(to right, ${gapColor(selected.gapScore)}, ${gapColor(selected.gapScore)}bb)` }} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
-                  {[
-                    ["Population",    selected.population.toLocaleString()],
-                    ["Stop Density",  `${selected.stopDensity}/km²`],
-                    ["Equity Score",  `${selected.equityScore ?? "—"}/100`],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-lg p-2.5" style={{ background: "var(--body-bg)" }}>
-                      <p style={{ color: "var(--text-muted)" }}>{k}</p>
-                      <p className="font-semibold mt-0.5" style={{ color: "var(--text-primary)" }}>{v}</p>
-                    </div>
+            <CardHeader title="Controls" subtitle="Route and coverage radius" />
+            <div className="space-y-4 p-5">
+              <Field label="TTC route">
+                <select className="select" value={selectedRouteId} onChange={(event) => onRouteChange(event.target.value)}>
+                  {routeOptions.map((route) => (
+                    <option key={route.route_id} value={route.route_id}>
+                      {routeLabel(route)}
+                    </option>
                   ))}
-                </div>
-                {selected.proposedStop && (
-                  <InfoTag color="success">
-                    <div>
-                      <p className="font-semibold">{selected.proposedStop.name}</p>
-                      <p className="font-normal mt-0.5">Est. +{Math.round(selected.estimatedBenefit).toLocaleString()} new riders/day</p>
-                    </div>
-                  </InfoTag>
-                )}
+                </select>
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                {metrics.map((metric) => (
+                  <KPI key={metric.label} label={metric.label} value={metric.value} tone={metric.tone} />
+                ))}
+                <KPI label="Map Center" value={`${center[0].toFixed(3)}, ${center[1].toFixed(3)}`} tone="slate" />
               </div>
-            </Card>
-          )}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Stop Density" subtitle="Nearby stops grouped by GTFS zone" />
+            <div className="h-56 p-4 pt-0">
+              {nearbyStops.loading ? (
+                <Skeleton className="h-full" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stopDensityData} margin={{ top: 18, right: 8, left: -18, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                    <XAxis dataKey="zone" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                    <Tooltip {...chartTooltip} />
+                    <Bar dataKey="count" radius={[6, 6, 0, 0]} fill="#2563eb" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Nearest Stops" subtitle="Click a row to recenter the coverage query" />
+            <div className="max-h-[360px] overflow-auto">
+              {(nearbyStops.data || []).slice(0, 14).map((stop, index) => (
+                <button
+                  key={stop.stop_id}
+                  className="flex w-full items-center gap-3 border-t border-slate-100 px-5 py-3 text-left transition hover:bg-slate-50"
+                  type="button"
+                  onClick={() => setCenter([stop.stop_lat, stop.stop_lon])}
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-900">{stop.stop_name}</span>
+                    <span className="block text-xs text-slate-500">Stop {stop.stop_id}</span>
+                  </span>
+                  <Icon name="map-pin" size={16} className="text-slate-400" />
+                </button>
+              ))}
+            </div>
+          </Card>
         </div>
       </div>
     </section>
