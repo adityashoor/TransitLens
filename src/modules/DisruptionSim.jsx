@@ -200,32 +200,53 @@ export default function DisruptionSim() {
                 </div>
               </Card>
 
-              {/* Alternatives */}
+              {/* Alternatives + cascade */}
               {scenario.alternatives?.length > 0 && (
                 <Card>
-                  <CardHeader title="Alternative Routes" subtitle="Recommended detours" action={<Badge color="info">Top {scenario.alternatives.length}</Badge>} />
+                  <CardHeader title="Alternative Routes" subtitle="Primary detours + cascade if congested" action={<Badge color="info">Top {scenario.alternatives.length}</Badge>} />
                   <div className="p-4 space-y-3">
-                    {scenario.alternatives.map((alt, i) => (
-                      <div
-                        key={alt.rank ?? i}
-                        className="flex items-start gap-3 p-3 rounded-xl"
-                        style={{ background: "var(--body-bg)", border: "1px solid var(--border-color)" }}
-                      >
-                        <div
-                          className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                          style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-light))" }}
-                        >
-                          {alt.rank ?? i + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{alt.route}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{alt.eta}</span>
-                            <Badge color={RELIABILITY_BADGE[alt.reliability] ?? "secondary"}>{alt.reliability}</Badge>
+                    {scenario.alternatives.map((alt, i) => {
+                      const cascadeEntry = scenario.cascade?.find(c => c.for_route === alt.route);
+                      return (
+                        <div key={alt.rank ?? i}>
+                          <div
+                            className="flex items-start gap-3 p-3 rounded-xl"
+                            style={{ background: "var(--body-bg)", border: "1px solid var(--border-color)" }}
+                          >
+                            <div
+                              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                              style={{ background: "linear-gradient(135deg, var(--primary), var(--primary-light))" }}
+                            >
+                              {alt.rank ?? i + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{alt.route}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{alt.eta}</span>
+                                <Badge color={RELIABILITY_BADGE[alt.reliability] ?? "secondary"}>{alt.reliability}</Badge>
+                              </div>
+                            </div>
                           </div>
+                          {/* Second-ring cascade */}
+                          {cascadeEntry?.alternatives?.length > 0 && (
+                            <div className="ml-8 mt-1.5 space-y-1.5">
+                              <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-light)" }}>
+                                ↳ If {alt.route.split(" — ")[0]} congested:
+                              </p>
+                              {cascadeEntry.alternatives.map((sub, j) => (
+                                <div key={j} className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                                  style={{ background: "rgba(98,89,202,0.05)", border: "1px dashed var(--border-color)" }}>
+                                  <span className="text-[10px] font-semibold w-4 text-center" style={{ color: "var(--primary)" }}>{sub.rank}</span>
+                                  <span className="text-[11px] flex-1 truncate" style={{ color: "var(--text-muted)" }}>{sub.route}</span>
+                                  <span className="text-[10px]" style={{ color: "var(--text-light)" }}>{sub.eta}</span>
+                                  <Badge color={RELIABILITY_BADGE[sub.reliability] ?? "secondary"}>{sub.reliability}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </Card>
               )}

@@ -8,6 +8,7 @@ Endpoints:
   GET /api/gtfs/stops
   GET /api/gtfs/shapes/{route_id}
   GET /api/equity/scores
+  GET /api/equity/routes
   GET /api/ridership/timeseries
   GET /api/ridership/heatmap
   GET /api/ridership/demand
@@ -25,6 +26,7 @@ from datetime import date
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
+from shapely.geometry import box
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -81,6 +83,28 @@ async def lifespan(app: FastAPI):
     _state["equity_scores"] = compute_equity_scores(
         _state["stops"], _state["route_stops"]
     )
+
+    # 4a. Pre-compute daily trip counts per stop (used by disruption simulation)
+    logger.info("Computing trip counts per stop …")
+    try:
+        from app.data_loader import get_gtfs, load_stop_times
+        raw_frames = get_gtfs()
+        stop_times_df = load_stop_times(raw_frames)
+        _state["stop_trip_counts"] = (
+            stop_times_df.groupby("stop_id")["trip_id"].nunique().to_dict()
+        )
+        logger.info("Trip counts computed — %d stops with service", len(_state["stop_trip_counts"]))
+    except Exception as exc:
+        logger.warning("Could not compute trip counts: %s", exc)
+        _state["stop_trip_counts"] = {}
+
+    # 4b. Pre-compute per-route equity scores
+    logger.info("Computing route equity scores …")
+    _state["equity_by_route"] = _compute_equity_by_route(
+        _state["stops"], _state["route_stops"],
+        _state["routes"], _state["equity_scores"],
+    )
+    logger.info("Route equity computed — %d routes", len(_state["equity_by_route"]))
 
     # 5. Pre-compute station heatmap
     _state["station_heatmap"] = generate_station_heatmap(_state["stops"])
@@ -164,6 +188,62 @@ def get_equity_scores():
     return _state["equity_scores"]
 
 
+def _compute_equity_by_route(stops_gdf, route_stops_df, routes_df, equity_scores) -> list[dict]:
+    """
+    For each route, average the equity score of the neighbourhoods its stops fall in
+    (nearest-centroid assignment). Returns up to 12 representative routes, subway-first.
+    """
+    if not equity_scores:
+        return []
+
+    nh_lats   = np.array([z["lat"]         for z in equity_scores])
+    nh_lngs   = np.array([z["lng"]         for z in equity_scores])
+    nh_scores = np.array([z["equityScore"] for z in equity_scores])
+
+    slats       = stops_gdf["stop_lat"].values.astype(float)
+    slngs       = stops_gdf["stop_lon"].values.astype(float)
+    stop_ids_arr = stops_gdf["stop_id"].values
+
+    # assign each stop to nearest neighbourhood by squared euclidean distance
+    stop_equity: dict[str, int] = {}
+    for i, sid in enumerate(stop_ids_arr):
+        dists = (nh_lats - slats[i]) ** 2 + (nh_lngs - slngs[i]) ** 2
+        stop_equity[sid] = int(nh_scores[int(np.argmin(dists))])
+
+    result = []
+    for _, route in routes_df.iterrows():
+        rid   = route["route_id"]
+        rtype = int(route.get("route_type", 3))
+        short = str(route.get("route_short_name", "") or "").strip()
+        long_ = str(route.get("route_long_name",  "") or "").strip()
+        name  = f"{short} {long_[:30]}".strip(" ") if (short and long_ and short != long_) else (short or long_ or rid)
+
+        sids   = route_stops_df[route_stops_df["route_id"] == rid]["stop_id"].tolist()
+        scores = [stop_equity[s] for s in sids if s in stop_equity]
+        if not scores:
+            continue
+
+        result.append({
+            "id":         rid,
+            "name":       name[:38],
+            "score":      round(sum(scores) / len(scores)),
+            "route_type": rtype,
+        })
+
+    type_order = {1: 0, 0: 1, 3: 2}
+    result.sort(key=lambda r: (type_order.get(r["route_type"], 3), r["name"]))
+
+    seen: set[str] = set()
+    deduped = []
+    for r in result:
+        key = r["name"][:18].lower()
+        if key not in seen:
+            seen.add(key)
+            deduped.append(r)
+
+    return deduped[:12]
+
+
 @app.get("/api/equity/summary", tags=["Equity"])
 def get_equity_summary():
     scores = [n["equityScore"] for n in _state["equity_scores"]]
@@ -174,6 +254,12 @@ def get_equity_summary():
         "underserved": sum(1 for s in scores if s < 50),
         "total_zones": len(scores),
     }
+
+
+@app.get("/api/equity/routes", tags=["Equity"])
+def get_equity_by_route():
+    """Per-route equity score derived from neighbourhood equity of served stops."""
+    return _state.get("equity_by_route", [])
 
 
 # ── Ridership ─────────────────────────────────────────────────────────────────
@@ -282,36 +368,78 @@ def get_model_metrics():
 
 # Lookup: stop_id → affected routes + alternatives
 # Built dynamically from real GTFS; falls back to heuristic for unknown stops.
+_PLATFORM_RE = r"\s*[-–]\s*(northbound|southbound|eastbound|westbound|platform\s*\d*|nb|sb|eb|wb).*"
+
+def _clean_stop_name(raw: str) -> str:
+    import re
+    return re.sub(_PLATFORM_RE, "", raw, flags=re.IGNORECASE).strip()
+
+def _route_label_for(routes_df, rid: str) -> str:
+    mask = routes_df["route_id"] == rid
+    if not mask.any():
+        return rid
+    r = routes_df[mask].iloc[0]
+    short = str(r.get("route_short_name", "") or "").strip()
+    long_ = str(r.get("route_long_name",  "") or "").strip()
+    return f"{short} – {long_[:35]}" if (short and long_ and short != long_) else (short or long_ or rid)
+
+
 def _build_disruption_response(stop_id: str) -> dict:
-    stops       = _state["stops"]
-    route_stops = _state["route_stops"]
-    routes      = _state["routes"]
+    stops            = _state["stops"]
+    route_stops      = _state["route_stops"]
+    routes           = _state["routes"]
+    stop_trip_counts = _state.get("stop_trip_counts", {})
 
     stop_row = stops[stops["stop_id"] == stop_id]
     if stop_row.empty:
         raise HTTPException(404, f"Stop {stop_id!r} not found")
 
-    stop_name = stop_row.iloc[0]["stop_name"]
+    stop_name = _clean_stop_name(stop_row.iloc[0]["stop_name"])
 
-    # find all routes serving this stop
-    serving_route_ids = route_stops[route_stops["stop_id"] == stop_id]["route_id"].tolist()
+    # All routes and all sibling-platform stops (same cleaned name) contribute
+    _platform_re_compiled = __import__("re").compile(_PLATFORM_RE, __import__("re").IGNORECASE)
+    sibling_stop_ids = stops[
+        stops["stop_name"].str.replace(_platform_re_compiled, "", regex=True).str.strip() == stop_name
+    ]["stop_id"].tolist()
+
+    serving_route_ids = (
+        route_stops[route_stops["stop_id"].isin(sibling_stop_ids)]["route_id"]
+        .unique().tolist()
+    )
     serving_routes = routes[routes["route_id"].isin(serving_route_ids)]
 
-    # estimate impacted riders (route_type based capacity × utilisation)
-    UTIL = {1: 0.82, 0: 0.75, 3: 0.65}
-    CAP  = {1: 18000, 0: 6000, 3: 3200}
-    impacted = int(
-        serving_routes["route_type"]
-        .apply(lambda rt: CAP.get(int(rt), 3200) * UTIL.get(int(rt), 0.65))
-        .sum()
-    )
+    # --- Impacted riders: daily trips × avg riders per trip by mode ---
+    AVG_RIDERS_PER_TRIP = {1: 320, 0: 85, 3: 45}   # subway train / streetcar / bus
+    PEAK_FACTOR         = {1: 0.35, 0: 0.40, 3: 0.45}  # fraction of daily riders in peak hour
 
-    # find nearby alternative stops (within ~800m)
-    lat = float(stop_row.iloc[0]["stop_lat"])
-    lng = float(stop_row.iloc[0]["stop_lon"])
-    from shapely.geometry import box
+    total_trips = sum(stop_trip_counts.get(sid, 0) for sid in sibling_stop_ids)
+    if total_trips > 0 and not serving_routes.empty:
+        # weight by dominant route type
+        dominant_type = int(serving_routes["route_type"].mode().iloc[0])
+        avg_riders    = AVG_RIDERS_PER_TRIP.get(dominant_type, 45)
+        peak_frac     = PEAK_FACTOR.get(dominant_type, 0.40)
+        impacted = max(500, int(total_trips * avg_riders * peak_frac))
+    else:
+        # fallback: flat heuristic
+        UTIL = {1: 0.82, 0: 0.75, 3: 0.65}
+        CAP  = {1: 18000, 0: 6000, 3: 3200}
+        impacted = int(
+            serving_routes["route_type"]
+            .apply(lambda rt: CAP.get(int(rt), 3200) * UTIL.get(int(rt), 0.65))
+            .sum()
+        ) or 2500
+
+    # --- Recovery time: scales with route count and station busyness ---
+    n_routes     = len(serving_route_ids)
+    is_transfer  = serving_routes["route_type"].nunique() > 1
+    trip_tier    = 0 if total_trips < 50 else (1 if total_trips < 200 else 2)
+    recovery     = max(12, min(45, 10 + n_routes * 4 + trip_tier * 5 + (8 if is_transfer else 0)))
+
+    # --- Nearby alternatives (within ~800 m) ---
+    lat  = float(stop_row.iloc[0]["stop_lat"])
+    lng  = float(stop_row.iloc[0]["stop_lon"])
     bbox = box(lng - 0.008, lat - 0.008, lng + 0.008, lat + 0.008)
-    nearby = stops[stops.geometry.within(bbox) & (stops["stop_id"] != stop_id)]
+    nearby = stops[stops.geometry.within(bbox) & ~stops["stop_id"].isin(sibling_stop_ids)]
 
     nearby_route_ids = route_stops[route_stops["stop_id"].isin(nearby["stop_id"])]["route_id"].unique()
     alt_routes = routes[
@@ -321,37 +449,67 @@ def _build_disruption_response(stop_id: str) -> dict:
 
     alternatives = []
     for i, (_, r) in enumerate(alt_routes.iterrows(), 1):
-        rt    = int(r.get("route_type", 3))
-        label = r.get("route_short_name") or r["route_id"]
-        name  = r.get("route_long_name") or label
+        label   = str(r.get("route_short_name") or r["route_id"])
+        name    = str(r.get("route_long_name") or label)
+        eta_min = 6 + i * 4
         alternatives.append({
             "rank":        i,
+            "route_id":    str(r["route_id"]),
             "route":       f"{label} — {name[:40]}",
-            "eta":         f"+{6 + i * 4} min",
+            "eta_min":     eta_min,
+            "eta":         f"+{eta_min} min",
             "reliability": ["High", "Medium", "Low"][min(i - 1, 2)],
         })
 
     if not alternatives:
         alternatives = [
-            {"rank": 1, "route": "Parallel bus route",    "eta": "+10 min", "reliability": "Medium"},
-            {"rank": 2, "route": "Alternate nearby stop",  "eta": "+15 min", "reliability": "High"},
-            {"rank": 3, "route": "Surface alternative",    "eta": "+20 min", "reliability": "Low"},
+            {"rank": 1, "route_id": None, "route": "Parallel bus route",   "eta_min": 10, "eta": "+10 min", "reliability": "Medium"},
+            {"rank": 2, "route_id": None, "route": "Alternate nearby stop", "eta_min": 15, "eta": "+15 min", "reliability": "High"},
+            {"rank": 3, "route_id": None, "route": "Surface alternative",   "eta_min": 20, "eta": "+20 min", "reliability": "Low"},
         ]
 
-    n_routes = len(serving_route_ids)
-    recovery = max(15, min(40, 10 + n_routes * 3))
+    # --- Cascade: second-ring alternatives for top 2 primaries ---
+    wider_bbox     = box(lng - 0.016, lat - 0.016, lng + 0.016, lat + 0.016)
+    wider_nearby   = stops[stops.geometry.within(wider_bbox) & ~stops["stop_id"].isin(sibling_stop_ids)]
+    wider_route_ids = route_stops[route_stops["stop_id"].isin(wider_nearby["stop_id"])]["route_id"].unique()
+
+    cascade = []
+    for primary in alternatives[:2]:
+        primary_rid = primary.get("route_id")
+        exclude = set(serving_route_ids)
+        if primary_rid:
+            exclude.add(primary_rid)
+
+        sub_alt_routes = routes[
+            routes["route_id"].isin(wider_route_ids) &
+            ~routes["route_id"].isin(exclude)
+        ].head(2)
+
+        sub_alts = []
+        for j, (_, r) in enumerate(sub_alt_routes.iterrows(), 1):
+            label = str(r.get("route_short_name") or r["route_id"])
+            name  = str(r.get("route_long_name") or label)
+            base  = primary.get("eta_min", 10)
+            sub_alts.append({
+                "rank":        j,
+                "route":       f"{label} — {name[:38]}",
+                "eta":         f"+{base + j * 5} min",
+                "reliability": ["Medium", "Low"][min(j - 1, 1)],
+            })
+
+        if sub_alts:
+            cascade.append({"for_route": primary["route"], "alternatives": sub_alts})
 
     return {
-        "stop_id":        stop_id,
-        "stop_name":      stop_name,
+        "stop_id":         stop_id,
+        "stop_name":       stop_name,
         "affected_routes": [
-            {"route_id": rid,
-             "route_name": routes[routes["route_id"] == rid]["route_short_name"].iloc[0]
-                           if rid in routes["route_id"].values else rid}
+            {"route_id": rid, "route_name": _route_label_for(routes, rid)}
             for rid in serving_route_ids[:6]
         ],
-        "alternatives":   alternatives,
-        "recovery_time":  f"{recovery} min",
+        "alternatives":    alternatives,
+        "cascade":         cascade,
+        "recovery_time":   f"{recovery} min",
         "impacted_riders": impacted,
     }
 
@@ -363,25 +521,54 @@ def simulate_disruption(stop_id: str):
 
 @app.get("/api/disruption/stations", tags=["Disruption"])
 def get_key_stations():
-    """Return subway/high-priority stops for the disruption map."""
+    """Return deduplicated subway stations for the disruption map."""
     stops       = _state["stops"]
     route_stops = _state["route_stops"]
     routes      = _state["routes"]
 
+    # route_id → human label  e.g. "1" → "Line 1 – Yonge-University"
+    route_label: dict[str, str] = {}
+    for _, r in routes.iterrows():
+        short = str(r.get("route_short_name", "") or "").strip()
+        long_ = str(r.get("route_long_name",  "") or "").strip()
+        label = f"{short} – {long_[:35]}" if (short and long_ and short != long_) else (short or long_ or r["route_id"])
+        route_label[r["route_id"]] = label
+
     subway_route_ids = routes[routes["route_type"] == 1]["route_id"].tolist()
     subway_stop_ids  = route_stops[route_stops["route_id"].isin(subway_route_ids)]["stop_id"].unique()
-    subway_stops     = stops[stops["stop_id"].isin(subway_stop_ids)].head(30)
+    subway_stops     = stops[stops["stop_id"].isin(subway_stop_ids)].copy()
 
+    # Strip platform suffixes to get a canonical station name
+    _platform_re = r"\s*[-–]\s*(northbound|southbound|eastbound|westbound|platform \d*|nb|sb|eb|wb).*"
+    subway_stops["station_name"] = (
+        subway_stops["stop_name"]
+        .str.replace(_platform_re, "", case=False, regex=True)
+        .str.strip()
+    )
+
+    # Deduplicate: keep one stop per canonical station name (the first encountered)
+    seen_names: set[str] = set()
     result = []
     for _, row in subway_stops.iterrows():
-        serving = route_stops[route_stops["stop_id"] == row["stop_id"]]["route_id"].tolist()
+        name = row["station_name"]
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
+        serving_ids = route_stops[route_stops["stop_id"] == row["stop_id"]]["route_id"].unique().tolist()
+        route_names = list({route_label.get(rid, rid) for rid in serving_ids})[:4]
+
         result.append({
             "stop_id":   row["stop_id"],
-            "stop_name": row["stop_name"],
+            "stop_name": name,
             "lat":       float(row["stop_lat"]),
             "lng":       float(row["stop_lon"]),
-            "routes":    serving[:4],
+            "routes":    route_names,
         })
+
+        if len(result) >= 40:
+            break
+
     return result
 
 
@@ -413,21 +600,28 @@ def get_gap_zones():
         gap_magnitude    = max(0.05, (threshold - z["equityScore"]) / max(threshold, 1))
         estimated_riders = int(z["population"] * 0.08 * gap_magnitude)
 
+        gap_score      = 100 - z["equityScore"]
+        # cost proxy: $120k base + $1k per gap-score point (more severe = costlier to fix)
+        cost_k         = 120 + gap_score
+        roi_score      = round(estimated_riders / max(1, cost_k), 2)   # riders/day per $1k invested
+
         result.append({
-            "id":          z["id"],
-            "name":        z["name"],
-            "lat":         z["lat"],
-            "lng":         z["lng"],
-            "population":  z["population"],
-            "stopDensity": z["stopDensity"],
-            "gapScore":    100 - z["equityScore"],   # invert: higher = bigger gap
-            "equityScore": z["equityScore"],
+            "id":               z["id"],
+            "name":             z["name"],
+            "lat":              z["lat"],
+            "lng":              z["lng"],
+            "population":       z["population"],
+            "stopDensity":      z["stopDensity"],
+            "gapScore":         gap_score,
+            "equityScore":      z["equityScore"],
             "proposedStop": {
                 "lat":  proposed_lat,
                 "lng":  proposed_lng,
                 "name": f"Proposed: {z['name']} Transit Hub",
             },
             "estimatedBenefit": estimated_riders,
+            "costEstimateK":    cost_k,      # thousands of CAD / year
+            "roiScore":         roi_score,   # riders per day per $1k invested
         })
 
     return result
@@ -471,10 +665,16 @@ def get_kpi():
         sum(z["equityScore"] for z in equity_scores) / max(len(equity_scores), 1), 1
     ) if equity_scores else 62.4
 
+    rdf = _state.get("ridership_df")
+    if rdf is not None and not rdf.empty and "actual_ridership" in rdf.columns:
+        daily_ridership = int(rdf["actual_ridership"].sum() / 90)
+    else:
+        daily_ridership = 1_240_000
+
     return {
         "totalRoutes":           len(routes),
         "totalStops":            len(stops),
-        "dailyRidership":        1_240_000,
+        "dailyRidership":        daily_ridership,
         "avgEquityScore":        avg_eq,
         "disruptionIndex":       3.2,
         "demandForecastAccuracy":meta.get("accuracy_pct", 87.5),

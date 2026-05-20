@@ -1,10 +1,20 @@
-import { useState, useEffect } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip } from "react-leaflet";
+import { useState, useEffect, useRef } from "react";
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as MapTooltip, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { fetchEquityScores } from "../api/client";
-import { equityRoutes } from "../data/mockData";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { fetchEquityScores, fetchEquityRoutes, fetchDemandByRoute } from "../api/client";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  ScatterChart, Scatter, ZAxis, ReferenceLine, Label,
+} from "recharts";
 import { Card, CardHeader, Badge, PageHeader, PillGroup, StatCard, InfoTag } from "../components/ui";
+
+function FlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) map.flyTo([target.lat, target.lng], 14, { duration: 1 });
+  }, [target, map]);
+  return null;
+}
 
 const TORONTO = [43.6532, -79.3832];
 
@@ -63,21 +73,39 @@ function normalise(n) {
 }
 
 export default function EquityScoring() {
-  const [filter, setFilter] = useState("All");
-  const [selected, setSelected] = useState(null);
-  const [zones, setZones] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [apiLive, setApiLive] = useState(false);
+  const [filter,       setFilter]       = useState("All");
+  const [selected,     setSelected]     = useState(null);
+  const [mapTarget,    setMapTarget]    = useState(null);
+  const [zones,        setZones]        = useState([]);
+  const [equityRoutes, setEquityRoutes] = useState([]);
+  const [demand,       setDemand]       = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [apiLive,      setApiLive]      = useState(false);
+  const [fetchedAt,    setFetchedAt]    = useState(null);
 
   useEffect(() => {
-    fetchEquityScores().then((raw) => {
+    Promise.all([fetchEquityScores(), fetchEquityRoutes(), fetchDemandByRoute()]).then(([raw, routes, dem]) => {
       const data = raw.map(normalise);
       setZones(data);
-      // If API returned real data the first item's id won't be a number (mock uses numeric ids)
+      setEquityRoutes(Array.isArray(routes) ? routes : []);
+      setDemand(Array.isArray(dem) ? dem : []);
       setApiLive(raw.length > 0 && ("vulnerability" in raw[0] || "stopCount" in raw[0] || "equity_score" in raw[0]));
+      setFetchedAt(new Date());
       setLoading(false);
     });
   }, []);
+
+  // Join equityRoutes with demand on route_id for scatter plot
+  const scatterData = equityRoutes.map((er) => {
+    const d = demand.find((r) => r.route_id === er.id);
+    if (!d || !d.capacity) return null;
+    return {
+      name:       er.name,
+      equity:     er.score,
+      loadFactor: Math.round((d.demand / d.capacity) * 100),
+      routeType:  er.route_type,
+    };
+  }).filter(Boolean);
 
   const filtered = zones.filter((n) => {
     if (filter === "Low Income") return n.incomeIndex < 50;  // < $50k
@@ -95,9 +123,10 @@ export default function EquityScoring() {
         title="Equity Scoring"
         subtitle="Transit access scored per neighbourhood using census demographics and stop density"
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
             <Badge color={apiLive ? "success" : "warning"}>{apiLive ? "🟢 Live API" : "⚠ Mock data"}</Badge>
-            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Source: TTC GTFS · Statistics Canada</span>
+            <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>TTC GTFS · StatCan</span>
+            {fetchedAt && <span className="text-[10px]" style={{ color: "var(--text-light)" }}>Updated {fetchedAt.toLocaleTimeString()}</span>}
           </div>
         }
       />
@@ -123,15 +152,15 @@ export default function EquityScoring() {
       </div>
 
       {/* ── Main content ───────────────────────────── */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
         {/* Map */}
-        <Card className="xl:col-span-2">
+        <Card className="xl:col-span-2 flex flex-col" style={{ overflow: "hidden" }}>
           <CardHeader
             title="Neighbourhood Equity Map"
             subtitle="Click a marker to view details · Coloured by equity score"
             action={<Badge color={underserved > 3 ? "danger" : "success"}>{underserved} underserved</Badge>}
           />
-          <div style={{ height: 420 }}>
+          <div className="flex-1" style={{ minHeight: 420 }}>
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
@@ -142,6 +171,7 @@ export default function EquityScoring() {
                   attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
+                <FlyTo target={mapTarget} />
                 {filtered.map((n) => (
                   <CircleMarker
                     key={n.id}
@@ -319,7 +349,8 @@ export default function EquityScoring() {
                   <tr
                     key={n.id}
                     className="cursor-pointer"
-                    onClick={() => setSelected(n)}
+                    onClick={() => { setSelected(n); setMapTarget({ lat: n.lat, lng: n.lng }); }}
+                    title="Click to fly map to this neighbourhood"
                     style={selected?.id === n.id ? { background: "var(--primary-01)" } : {}}
                   >
                     <td className="font-medium">{n.name}</td>
@@ -345,6 +376,62 @@ export default function EquityScoring() {
               </tbody>
             </table>
           )}
+        </div>
+      </Card>
+
+      {/* ── Equity × Ridership Scatter ───────────── */}
+      <Card className="mt-4">
+        <CardHeader
+          title="Equity vs Ridership Load"
+          subtitle="Each dot = a TTC route — low equity + high load = chronically underserved"
+          action={<Badge color="info">{scatterData.length} routes matched</Badge>}
+        />
+        <div className="p-5">
+          {loading || scatterData.length === 0 ? (
+            <Skeleton h="h-[260px]" />
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <ScatterChart margin={{ top: 16, right: 24, left: 0, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f6" />
+                <XAxis type="number" dataKey="equity" domain={[0, 100]} name="Equity Score"
+                  tick={{ fill: "#a8afc7", fontSize: 10, fontFamily: "Poppins" }}>
+                  <Label value="Equity Score →" position="insideBottom" offset={-14}
+                    style={{ fill: "#7b8191", fontSize: 10, fontFamily: "Poppins" }} />
+                </XAxis>
+                <YAxis type="number" dataKey="loadFactor" domain={[0, 120]} name="Load Factor %"
+                  tick={{ fill: "#a8afc7", fontSize: 10, fontFamily: "Poppins" }}>
+                  <Label value="Load Factor %" angle={-90} position="insideLeft" offset={12}
+                    style={{ fill: "#7b8191", fontSize: 10, fontFamily: "Poppins" }} />
+                </YAxis>
+                <ZAxis range={[60, 60]} />
+                <ReferenceLine x={55}  stroke="#f7b731" strokeDasharray="4 2" label={{ value: "Equity 55", fill: "#b8860b", fontSize: 9, fontFamily: "Poppins" }} />
+                <ReferenceLine y={85}  stroke="#f5334f" strokeDasharray="4 2" label={{ value: "85% cap", fill: "#c0112c", fontSize: 9, fontFamily: "Poppins", position: "insideTopRight" }} />
+                <Tooltip
+                  cursor={{ strokeDasharray: "3 3" }}
+                  contentStyle={{ background: "#fff", border: "1px solid #e8e8f7", borderRadius: 10, fontFamily: "Poppins", fontSize: 12 }}
+                  formatter={(v, name) => [name === "equity" ? `${v}/100` : `${v}%`, name === "equity" ? "Equity Score" : "Load Factor"]}
+                  labelFormatter={(_, payload) => payload?.[0]?.payload?.name ?? ""}
+                />
+                <Scatter data={scatterData} name="Routes">
+                  {scatterData.map((d, i) => (
+                    <Cell key={i} fill={scoreColor(d.equity)} fillOpacity={0.82} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          )}
+          <div className="flex flex-wrap items-center gap-4 mt-2 pt-3" style={{ borderTop: "1px solid var(--border-color)" }}>
+            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>Colour = equity band:</span>
+            {[["≥75 High","#19b159"],["55–74 Medium","#f7b731"],["40–54 Low","#eb6f33"],["<40 Critical","#f5334f"]].map(([l,c])=>(
+              <div key={l} className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />
+                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{l}</span>
+              </div>
+            ))}
+            <span className="ml-auto text-[10px]" style={{ color: "var(--text-light)" }}>
+              Bottom-left quadrant = low equity + low ridership (neglected). Top-left = low equity + overcrowded (urgent).
+            </span>
+          </div>
         </div>
       </Card>
     </section>

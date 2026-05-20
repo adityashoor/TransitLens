@@ -45,6 +45,11 @@ export const fetchStops = () =>
 export const fetchEquityScores = () =>
   _get("/api/equity/scores", () => mock.equityNeighborhoods);
 
+export const fetchEquityRoutes = () =>
+  _get("/api/equity/routes", () =>
+    mock.equityRoutes.map((r) => ({ id: r.id, name: r.name, score: r.score, route_type: 3 }))
+  );
+
 export const fetchEquitySummary = () =>
   _get("/api/equity/summary", () => ({
     average: mock.kpiData.avgEquityScore,

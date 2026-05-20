@@ -6,8 +6,9 @@ import {
 import { fetchTimeSeries, fetchHeatmap, fetchDemandByRoute, fetchModelMetrics } from "../api/client";
 import { Card, CardHeader, Badge, PageHeader, StatCard, PillGroup, InfoTag } from "../components/ui";
 
-const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-const DAY_L = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+const DAYS     = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_L    = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const ROUTE_TYPES = [
   { label: "Subway",     value: 1 },
@@ -38,19 +39,25 @@ function Skeleton({ h = "h-8", w = "w-full" }) {
 }
 
 export default function RidershipDemand() {
-  const [view, setView] = useState("Time Series");
-  const [routeType, setRouteType] = useState(1);
+  const [view,       setView]       = useState("Time Series");
+  const [routeType,  setRouteType]  = useState(1);
+  const [dayOfWeek,  setDayOfWeek]  = useState(1);   // 0=Sun … 6=Sat
+  const [tempC,      setTempC]      = useState(5);
+  const [precipMm,   setPrecipMm]   = useState(0);
+  const [tempCInput, setTempCInput] = useState(5);   // staged until slider release
+  const [precipInput,setPrecipInput]= useState(0);
 
-  const [series,  setSeries]  = useState([]);
-  const [heatmap, setHeatmap] = useState([]);
-  const [demand,  setDemand]  = useState([]);
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [series,     setSeries]     = useState([]);
+  const [heatmap,    setHeatmap]    = useState([]);
+  const [demand,     setDemand]     = useState([]);
+  const [metrics,    setMetrics]    = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [fetchedAt,  setFetchedAt]  = useState(null);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetchTimeSeries({ routeType, dayOfWeek: 1, month: 3 }),
+      fetchTimeSeries({ routeType, dayOfWeek, month: 3, tempC, precipMm }),
       fetchHeatmap(),
       fetchDemandByRoute(),
       fetchModelMetrics(),
@@ -59,9 +66,10 @@ export default function RidershipDemand() {
       setHeatmap(h);
       setDemand(d);
       setMetrics(m);
+      setFetchedAt(new Date());
       setLoading(false);
     });
-  }, [routeType]);
+  }, [routeType, dayOfWeek, tempC, precipMm]);
 
   const maxH = heatmap.length
     ? Math.max(...heatmap.flatMap((r) => DAYS.map((d) => r[d] ?? 0)))
@@ -76,9 +84,10 @@ export default function RidershipDemand() {
         title="Ridership Demand"
         subtitle="ML-predicted vs actual ridership — routes, stations, and time patterns"
         action={
-          metrics
-            ? <Badge color="success">XGBoost · R²={metrics.r2} · {metrics.accuracy_pct}% accuracy</Badge>
-            : <Badge color="warning">Loading model…</Badge>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {metrics && <Badge color="success">XGBoost · R²={metrics.r2} · {metrics.accuracy_pct}%</Badge>}
+            {fetchedAt && <span className="text-[10px]" style={{ color: "var(--text-light)" }}>Updated {fetchedAt.toLocaleTimeString()}</span>}
+          </div>
         }
       />
 
@@ -111,13 +120,88 @@ export default function RidershipDemand() {
         )}
       </div>
 
+      {/* Day-of-week + weather controls (Time Series only) */}
+      {view === "Time Series" && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+          {/* Day selector */}
+          <div className="rounded-[var(--card-radius)] px-4 py-3 flex items-center gap-3 flex-wrap"
+               style={{ background: "var(--card-bg, #fff)", border: "1px solid var(--border-color)", boxShadow: "var(--card-shadow)" }}>
+            <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>Day</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAY_FULL.map((d, i) => (
+                <button
+                  key={i}
+                  onClick={() => setDayOfWeek(i)}
+                  className="text-[11px] font-medium px-3 py-1 rounded-lg transition-all"
+                  style={{
+                    background: dayOfWeek === i ? "var(--primary)" : "var(--body-bg)",
+                    color:      dayOfWeek === i ? "#fff" : "var(--text-muted)",
+                    border:     `1px solid ${dayOfWeek === i ? "var(--primary)" : "var(--border-color)"}`,
+                  }}
+                >
+                  {d.slice(0, 3)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Weather sliders */}
+          <div className="rounded-[var(--card-radius)] px-4 py-3 flex items-center gap-6 flex-wrap"
+               style={{ background: "var(--card-bg, #fff)", border: "1px solid var(--border-color)", boxShadow: "var(--card-shadow)" }}>
+            <span className="text-[11px] font-semibold uppercase tracking-wider shrink-0" style={{ color: "var(--text-muted)" }}>Weather</span>
+            <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+              <span className="text-[18px]">🌡</span>
+              <div className="flex-1">
+                <div className="flex justify-between mb-1">
+                  <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Temp</span>
+                  <span className="text-[11px] font-semibold" style={{ color: "var(--primary)" }}>{tempCInput}°C</span>
+                </div>
+                <input type="range" min="-20" max="35" step="1"
+                  value={tempCInput}
+                  onChange={(e) => setTempCInput(+e.target.value)}
+                  onMouseUp={(e) => setTempC(+e.target.value)}
+                  onTouchEnd={(e) => setTempC(+e.target.value)}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                  style={{ accentColor: "var(--primary)" }}
+                />
+                <div className="flex justify-between mt-0.5">
+                  <span className="text-[9px]" style={{ color: "var(--text-light)" }}>-20°C</span>
+                  <span className="text-[9px]" style={{ color: "var(--text-light)" }}>35°C</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+              <span className="text-[18px]">🌧</span>
+              <div className="flex-1">
+                <div className="flex justify-between mb-1">
+                  <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Rain</span>
+                  <span className="text-[11px] font-semibold" style={{ color: "var(--info)" }}>{precipInput} mm</span>
+                </div>
+                <input type="range" min="0" max="50" step="1"
+                  value={precipInput}
+                  onChange={(e) => setPrecipInput(+e.target.value)}
+                  onMouseUp={(e) => setPrecipMm(+e.target.value)}
+                  onTouchEnd={(e) => setPrecipMm(+e.target.value)}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                  style={{ accentColor: "var(--info)" }}
+                />
+                <div className="flex justify-between mt-0.5">
+                  <span className="text-[9px]" style={{ color: "var(--text-light)" }}>0 mm</span>
+                  <span className="text-[9px]" style={{ color: "var(--text-light)" }}>50 mm</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Time Series ──────────────────────────── */}
       {view === "Time Series" && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <Card className="xl:col-span-2">
             <CardHeader
               title="Actual vs Predicted Ridership"
-              subtitle="Hourly demand (Monday · March) — dashed = XGBoost forecast"
+              subtitle={`${DAY_FULL[dayOfWeek]} · ${ROUTE_TYPES.find(r => r.value === routeType)?.label} · ${tempC}°C · ${precipMm}mm rain — dashed = XGBoost forecast`}
               action={<Badge color="primary">Live</Badge>}
             />
             <div className="p-5">
@@ -168,25 +252,35 @@ export default function RidershipDemand() {
               </div>
             </Card>
             <Card>
-              <CardHeader title="Key Features" subtitle="Top predictors (fixed importances)" />
+              <CardHeader title="Feature Importance" subtitle="XGBoost — top predictors" />
               <div className="p-4 space-y-2">
-                {[
-                  { f: "Hour of day",     pct: 92 },
-                  { f: "Day of week",     pct: 78 },
-                  { f: "Route type",      pct: 65 },
-                  { f: "Weather (temp)",  pct: 48 },
-                  { f: "Season",          pct: 41 },
-                ].map((x) => (
-                  <div key={x.f}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{x.f}</span>
-                      <span className="text-[11px] font-semibold" style={{ color: "var(--primary)" }}>{x.pct}%</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${x.pct}%` }} />
-                    </div>
-                  </div>
-                ))}
+                {loading || !metrics?.importances
+                  ? Array(5).fill(0).map((_, i) => <Skeleton key={i} h="h-8" />)
+                  : (() => {
+                      const LABELS = {
+                        hour: "Hour of day", day_of_week: "Day of week",
+                        route_type: "Route type", temp_c: "Weather (temp)",
+                        month: "Season / month", precip_mm: "Precipitation",
+                      };
+                      const maxVal = Math.max(...Object.values(metrics.importances));
+                      return Object.entries(metrics.importances)
+                        .sort(([, a], [, b]) => b - a)
+                        .map(([key, val]) => {
+                          const pct = Math.round((val / maxVal) * 100);
+                          return (
+                            <div key={key}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{LABELS[key] ?? key}</span>
+                                <span className="text-[11px] font-semibold" style={{ color: "var(--primary)" }}>{(val * 100).toFixed(1)}%</span>
+                              </div>
+                              <div className="progress-bar">
+                                <div className="progress-fill" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        });
+                    })()
+                }
               </div>
             </Card>
           </div>

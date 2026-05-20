@@ -73,15 +73,15 @@ export default function ServiceGap() {
         </>}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
         {/* Map */}
-        <Card className="xl:col-span-2">
+        <Card className="xl:col-span-2 flex flex-col" style={{ overflow: "hidden" }}>
           <CardHeader
             title={showProposed ? "Gap Zones + Proposed Stops" : "Current Service Gap Zones"}
             subtitle="Size = population · Colour = gap severity · Click for details"
             action={loading ? null : showProposed ? <Badge color="success">Proposals active</Badge> : <Badge color="danger">{zones.length} gaps</Badge>}
           />
-          <div style={{ height: 460 }}>
+          <div className="flex-1" style={{ minHeight: 460 }}>
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }} />
@@ -201,7 +201,7 @@ export default function ServiceGap() {
 
           {/* Priority list */}
           <Card>
-            <CardHeader title="Priority Gap Zones" subtitle="Ranked by gap score" action={<Badge color="danger">{zones.length} zones</Badge>} />
+            <CardHeader title="Priority Gap Zones" subtitle="Ranked by gap score · ROI = riders per $1k invested" action={<Badge color="danger">{zones.length} zones</Badge>} />
             <div>
               {loading ? Array(4).fill(0).map((_, i) => (
                 <div key={i} className="px-4 py-3" style={{ borderBottom: "1px solid var(--border-color)" }}>
@@ -230,6 +230,20 @@ export default function ServiceGap() {
                       <p className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>
                         Gap {z.gapScore}/100 · {z.population.toLocaleString()} residents
                       </p>
+                      {z.roiScore != null && (
+                        <div className="mt-1.5">
+                          <div className="flex justify-between mb-0.5">
+                            <span className="text-[9px]" style={{ color: "var(--text-light)" }}>ROI {z.roiScore} riders/$k</span>
+                            <span className="text-[9px]" style={{ color: "var(--text-light)" }}>${z.costEstimateK}k/yr</span>
+                          </div>
+                          <div className="h-1 rounded-full" style={{ background: "var(--border-color)" }}>
+                            <div className="h-1 rounded-full" style={{
+                              width: `${Math.min(100, (z.roiScore / 2) * 100)}%`,
+                              background: "linear-gradient(to right, #19b159, #6259ca)"
+                            }} />
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <span className="shrink-0 text-[11px] font-bold" style={{ color: gapColor(z.gapScore) }}>{z.gapScore}</span>
                   </button>
@@ -273,6 +287,11 @@ export default function ServiceGap() {
                     <div>
                       <p className="font-semibold">{selected.proposedStop.name}</p>
                       <p className="font-normal mt-0.5">Est. +{Math.round(selected.estimatedBenefit).toLocaleString()} new riders/day</p>
+                      {selected.costEstimateK != null && (
+                        <p className="font-normal mt-0.5" style={{ color: "var(--text-muted)" }}>
+                          ~${selected.costEstimateK}k/yr · ROI: {selected.roiScore} riders per $1k
+                        </p>
+                      )}
                     </div>
                   </InfoTag>
                 )}

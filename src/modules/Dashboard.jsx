@@ -3,8 +3,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, RadialBarChart, RadialBar,
 } from "recharts";
-import { fetchKPI, fetchTimeSeries, fetchDemandByRoute, fetchModelMetrics } from "../api/client";
-import { equityNeighborhoods } from "../data/mockData";
+import { fetchKPI, fetchTimeSeries, fetchDemandByRoute, fetchModelMetrics, fetchEquityScores, fetchGapZones } from "../api/client";
 import { StatCard, Card, CardHeader, Badge, PageHeader } from "../components/ui";
 
 const Icon = {
@@ -21,31 +20,44 @@ const CHART_TOOLTIP = {
   labelStyle: { color: "#1a1c2e", fontWeight: 600 },
 };
 
-const equityBands = [
-  { name: "High (≥75)",    value: equityNeighborhoods.filter(n => n.equityScore >= 75).length, fill: "#19b159" },
-  { name: "Medium (55–74)",value: equityNeighborhoods.filter(n => n.equityScore >= 55 && n.equityScore < 75).length, fill: "#f7b731" },
-  { name: "Low (40–54)",   value: equityNeighborhoods.filter(n => n.equityScore >= 40 && n.equityScore < 55).length, fill: "#eb6f33" },
-  { name: "Critical (<40)",value: equityNeighborhoods.filter(n => n.equityScore < 40).length,  fill: "#f5334f" },
-];
+function buildEquityBands(zones) {
+  return [
+    { name: "High (≥75)",    value: zones.filter(n => n.equityScore >= 75).length, fill: "#19b159" },
+    { name: "Medium (55–74)",value: zones.filter(n => n.equityScore >= 55 && n.equityScore < 75).length, fill: "#f7b731" },
+    { name: "Low (40–54)",   value: zones.filter(n => n.equityScore >= 40 && n.equityScore < 55).length, fill: "#eb6f33" },
+    { name: "Critical (<40)",value: zones.filter(n => n.equityScore < 40).length, fill: "#f5334f" },
+  ];
+}
 
-const ALERTS = [
-  { id: 1, route: "Line 1 — Yonge", msg: "Delay at Bloor-Yonge station",   type: "warning", time: "2 min ago"  },
-  { id: 2, route: "36 Finch West",  msg: "Low equity score neighbourhood", type: "danger",  time: "18 min ago" },
-  { id: 3, route: "504 King",       msg: "Ridership at 92% capacity",       type: "warning", time: "34 min ago" },
-  { id: 4, route: "Service Gap",    msg: "Malvern North flagged for review", type: "info",    time: "1 hr ago"   },
-];
+function buildAlerts(demand, zones, gapZones) {
+  const alerts = [];
+  (demand ?? []).forEach((r) => {
+    const pct = r.capacity > 0 ? Math.round((r.demand / r.capacity) * 100) : 0;
+    if (pct > 85) alerts.push({ id: `d-${r.route}`, route: r.route, msg: `Ridership at ${pct}% capacity`, type: "warning" });
+  });
+  (zones ?? []).filter(z => (z.equityScore ?? z.equity_score ?? 100) < 45).forEach((z) => {
+    alerts.push({ id: `e-${z.id}`, route: z.name, msg: "Critical equity score — underserved neighbourhood", type: "danger" });
+  });
+  (gapZones ?? []).slice(0, 2).forEach((z) => {
+    alerts.push({ id: `g-${z.id}`, route: "Service Gap", msg: `${z.name} flagged — gap score ${z.gapScore ?? "high"}`, type: "info" });
+  });
+  return alerts.slice(0, 6);
+}
 
 function Skeleton({ h = "h-8", w = "w-full" }) {
   return <div className={`${h} ${w} rounded-lg animate-pulse`} style={{ background: "#e8e8f7" }} />;
 }
 
 export default function Dashboard() {
-  const [kpi,     setKpi]     = useState(null);
-  const [series,  setSeries]  = useState([]);
-  const [demand,  setDemand]  = useState([]);
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [apiLive, setApiLive] = useState(false);
+  const [kpi,         setKpi]         = useState(null);
+  const [series,      setSeries]      = useState([]);
+  const [demand,      setDemand]      = useState([]);
+  const [metrics,     setMetrics]     = useState(null);
+  const [equityBands, setEquityBands] = useState(buildEquityBands([]));
+  const [alerts,      setAlerts]      = useState([]);
+  const [fetchedAt,   setFetchedAt]   = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [apiLive,     setApiLive]     = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -53,11 +65,16 @@ export default function Dashboard() {
       fetchTimeSeries({ routeType: 1, dayOfWeek: 1, month: 3 }),
       fetchDemandByRoute(),
       fetchModelMetrics(),
-    ]).then(([k, s, d, m]) => {
+      fetchEquityScores(),
+      fetchGapZones(),
+    ]).then(([k, s, d, m, zones, gaps]) => {
       setKpi(k);
       setSeries(s.filter((_, i) => i % 2 === 0));
       setDemand(d);
       setMetrics(m);
+      setEquityBands(buildEquityBands(Array.isArray(zones) ? zones : []));
+      setAlerts(buildAlerts(d, zones, gaps));
+      setFetchedAt(new Date());
       setApiLive(k.totalRoutes > 0 && k.totalRoutes !== 154);
       setLoading(false);
     });
@@ -170,22 +187,25 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader title="System Alerts" subtitle="Recent transit events" action={<Badge color="danger">{ALERTS.length} active</Badge>} />
+          <CardHeader title="System Alerts" subtitle="Derived from live data" action={<Badge color={alerts.length > 0 ? "danger" : "success"}>{alerts.length > 0 ? `${alerts.length} active` : "All clear"}</Badge>} />
           <div>
-            {ALERTS.map((a, idx) => (
-              <div
-                key={a.id}
-                className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-[#fafafe]"
-                style={{ borderBottom: idx < ALERTS.length - 1 ? "1px solid var(--border-color)" : "none" }}
-              >
-                <span className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: a.type === "danger" ? "var(--danger)" : a.type === "warning" ? "var(--warning)" : "var(--info)" }} aria-hidden="true" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{a.msg}</p>
-                  <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{a.route}</p>
+            {loading
+              ? Array(3).fill(0).map((_, i) => <div key={i} className="px-5 py-3"><Skeleton h="h-8" /></div>)
+              : alerts.length === 0
+                ? <p className="px-5 py-4 text-[12px]" style={{ color: "var(--text-muted)" }}>No active alerts — network operating normally.</p>
+                : alerts.map((a, idx) => (
+                <div
+                  key={a.id}
+                  className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-[#fafafe]"
+                  style={{ borderBottom: idx < alerts.length - 1 ? "1px solid var(--border-color)" : "none" }}
+                >
+                  <span className="mt-1 w-2 h-2 rounded-full shrink-0" style={{ background: a.type === "danger" ? "var(--danger)" : a.type === "warning" ? "var(--warning)" : "var(--info)" }} aria-hidden="true" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium truncate" style={{ color: "var(--text-primary)" }}>{a.msg}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{a.route}</p>
+                  </div>
                 </div>
-                <span className="text-[10px] shrink-0 mt-0.5" style={{ color: "var(--text-light)" }}>{a.time}</span>
-              </div>
-            ))}
+              ))}
           </div>
         </Card>
       </div>
@@ -212,6 +232,42 @@ export default function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* Data Sources panel */}
+      <Card className="mt-4">
+        <CardHeader
+          title="Data Sources"
+          subtitle="All data used by TransitLens — open licences, no PII"
+          action={fetchedAt && <span className="text-[10px]" style={{ color: "var(--text-light)" }}>Dashboard updated {fetchedAt.toLocaleTimeString()}</span>}
+        />
+        <div className="overflow-x-auto">
+          <table className="tl-table">
+            <thead>
+              <tr>
+                <th className="text-left">Dataset</th>
+                <th className="text-left">Source</th>
+                <th className="text-left">Licence</th>
+                <th className="text-left">Used for</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { dataset: "TTC GTFS Feed",               source: "open.toronto.ca",   licence: "Open Government Licence – Toronto", use: "Routes, stops, shapes, trip counts" },
+                { dataset: "Statistics Canada 2021 Census", source: "statcan.gc.ca",   licence: "Statistics Canada Open Licence",     use: "Equity demographics (income, seniors, disability)" },
+                { dataset: "OpenStreetMap",                source: "openstreetmap.org", licence: "ODbL 1.0",                          use: "Basemap tiles" },
+                { dataset: "Synthetic Ridership",          source: "Generated (team)", licence: "N/A — no PII",                      use: "Demand forecasting, XGBoost training" },
+              ].map((r) => (
+                <tr key={r.dataset}>
+                  <td className="font-medium">{r.dataset}</td>
+                  <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{r.source}</td>
+                  <td><Badge color="muted">{r.licence}</Badge></td>
+                  <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{r.use}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </section>
   );
 }
