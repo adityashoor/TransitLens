@@ -1,0 +1,242 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+@import "leaflet/dist/leaflet.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-electric: var(--electric);
+  --color-cyan: var(--cyan);
+  --color-teal: var(--teal);
+  --color-warn: var(--warn);
+  --color-success: var(--success);
+  --color-glow: var(--glow);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Dark by default — TransitLens is a dark cockpit */
+:root {
+  --radius: 0.875rem;
+
+  --background: oklch(0.16 0.03 255);
+  --foreground: oklch(0.97 0.01 240);
+
+  --surface: oklch(0.20 0.035 255);
+  --surface-2: oklch(0.24 0.04 255);
+
+  --card: oklch(0.21 0.035 255 / 0.7);
+  --card-foreground: oklch(0.97 0.01 240);
+  --popover: oklch(0.20 0.035 255);
+  --popover-foreground: oklch(0.97 0.01 240);
+
+  --primary: oklch(0.72 0.18 240);
+  --primary-foreground: oklch(0.12 0.03 255);
+
+  --secondary: oklch(0.27 0.04 255);
+  --secondary-foreground: oklch(0.97 0.01 240);
+
+  --muted: oklch(0.24 0.03 255);
+  --muted-foreground: oklch(0.7 0.03 250);
+
+  --accent: oklch(0.78 0.16 200);
+  --accent-foreground: oklch(0.12 0.03 255);
+
+  --destructive: oklch(0.65 0.24 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --border: oklch(1 0 0 / 0.08);
+  --input: oklch(1 0 0 / 0.1);
+  --ring: oklch(0.72 0.18 240);
+
+  --electric: oklch(0.72 0.2 250);
+  --cyan: oklch(0.82 0.17 200);
+  --teal: oklch(0.74 0.13 180);
+  --warn: oklch(0.78 0.18 70);
+  --success: oklch(0.74 0.17 155);
+  --glow: oklch(0.78 0.22 240);
+
+  --chart-1: oklch(0.72 0.2 250);
+  --chart-2: oklch(0.82 0.17 200);
+  --chart-3: oklch(0.74 0.13 180);
+  --chart-4: oklch(0.78 0.18 70);
+  --chart-5: oklch(0.7 0.22 320);
+
+  --sidebar: oklch(0.18 0.03 255);
+  --sidebar-foreground: oklch(0.92 0.01 240);
+  --sidebar-primary: oklch(0.72 0.18 240);
+  --sidebar-primary-foreground: oklch(0.12 0.03 255);
+  --sidebar-accent: oklch(0.24 0.04 255);
+  --sidebar-accent-foreground: oklch(0.97 0.01 240);
+  --sidebar-border: oklch(1 0 0 / 0.06);
+  --sidebar-ring: oklch(0.72 0.18 240);
+
+  --gradient-primary: linear-gradient(135deg, oklch(0.72 0.2 250), oklch(0.82 0.17 200));
+  --gradient-glow: radial-gradient(circle at 30% 20%, oklch(0.72 0.2 250 / 0.35), transparent 60%);
+  --shadow-glow: 0 0 40px -8px oklch(0.72 0.2 250 / 0.5);
+  --shadow-elegant: 0 18px 40px -20px oklch(0 0 0 / 0.6);
+}
+
+.light {
+  --background: oklch(0.985 0.005 240);
+  --foreground: oklch(0.18 0.04 255);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.96 0.01 240);
+  --card: oklch(1 0 0 / 0.8);
+  --card-foreground: oklch(0.18 0.04 255);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.04 255);
+  --primary: oklch(0.55 0.22 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.94 0.02 240);
+  --secondary-foreground: oklch(0.2 0.04 255);
+  --muted: oklch(0.94 0.01 240);
+  --muted-foreground: oklch(0.5 0.03 255);
+  --accent: oklch(0.6 0.18 200);
+  --accent-foreground: oklch(0.99 0 0);
+  --border: oklch(0.18 0.04 255 / 0.1);
+  --input: oklch(0.18 0.04 255 / 0.1);
+  --ring: oklch(0.55 0.22 250);
+  --sidebar: oklch(0.98 0.01 240);
+  --sidebar-foreground: oklch(0.2 0.04 255);
+  --sidebar-border: oklch(0.18 0.04 255 / 0.08);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body, #root { height: 100%; }
+  html { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Inter", sans-serif; }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-feature-settings: "cv11", "ss01", "ss03";
+    background-image:
+      radial-gradient(circle at 0% 0%, oklch(0.72 0.2 250 / 0.08), transparent 40%),
+      radial-gradient(circle at 100% 0%, oklch(0.82 0.17 200 / 0.06), transparent 40%);
+    background-attachment: fixed;
+  }
+  ::selection { background: oklch(0.72 0.2 250 / 0.4); }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  .high-contrast {
+    --border: oklch(1 0 0 / 0.25);
+    --muted-foreground: oklch(0.88 0.02 240);
+  }
+  .high-contrast.light {
+    --border: oklch(0.18 0.04 255 / 0.3);
+    --muted-foreground: oklch(0.28 0.03 255);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    background: color-mix(in oklab, var(--surface) 70%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-elegant);
+  }
+  .glass-panel {
+    background: color-mix(in oklab, var(--surface) 55%, transparent);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--color-border);
+  }
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .glow-ring {
+    box-shadow: 0 0 0 1px oklch(0.72 0.2 250 / 0.4), 0 0 30px -4px oklch(0.72 0.2 250 / 0.5);
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 0.1); border-radius: 99px; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.72 0.2 250 / 0.6); }
+  50% { box-shadow: 0 0 0 12px oklch(0.72 0.2 250 / 0); }
+}
+@keyframes route-flow {
+  to { stroke-dashoffset: -40; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.animate-pulse-glow { animation: pulse-glow 2s ease-out infinite; }
+.animate-float { animation: float 4s ease-in-out infinite; }
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.06), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Leaflet dark map override */
+.leaflet-container {
+  background: oklch(0.16 0.03 255);
+  font-family: inherit;
+}
+.leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.7);
+}
+.leaflet-control-zoom a,
+.leaflet-control-attribution {
+  background: var(--surface) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-control-attribution a { color: var(--accent) !important; }
