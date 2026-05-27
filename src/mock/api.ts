@@ -112,37 +112,26 @@ function parseXmlAttrs(xml: string, tag: string): Record<string, string>[] {
   return results;
 }
 
-// Key TTC bus/streetcar routes to poll for live vehicles
-const LIVE_ROUTES = ["501","504","505","506","510","29","32","35","36","39","52","60","95"];
-
 async function fetchVehicles() {
   try {
-    const responses = await Promise.allSettled(
-      LIVE_ROUTES.map((r) =>
-        fetch(`${UMO}?command=vehicleLocations&a=ttc&r=${r}&t=0`, { signal: AbortSignal.timeout(6000) })
-          .then((res) => res.text())
-      )
-    );
+    // Single call — returns ALL TTC vehicles across every route at once
+    const res = await fetch(`${UMO}?command=vehicleLocations&a=ttc&t=0`, {
+      signal: AbortSignal.timeout(6000),
+    });
+    const xml = await res.text();
+    const parsed = parseXmlAttrs(xml, "vehicle");
 
-    const vehicles: ReturnType<typeof generateVehicles> = [];
-    let n = 0;
-    for (let i = 0; i < responses.length; i++) {
-      const res = responses[i];
-      if (res.status !== "fulfilled") continue;
-      const parsed = parseXmlAttrs(res.value, "vehicle");
-      const routeTag = LIVE_ROUTES[i];
-      for (const v of parsed) {
-        if (!v.lat || !v.lon) continue;
-        vehicles.push({
-          id: `v${++n}-${v.id}`,
-          routeId: routeTag,
-          pos: [parseFloat(v.lat), parseFloat(v.lon)],
-          bearing: parseInt(v.heading ?? "0"),
-          delay: parseInt(v.secsSinceReport ?? "0") > 60 ? 2 : 0,
-          occupancy: Math.round(30 + Math.random() * 60),
-        });
-      }
-    }
+    const vehicles = parsed
+      .filter((v) => v.lat && v.lon)
+      .map((v, i) => ({
+        id: `v${i}-${v.id}`,
+        routeId: v.routeTag ?? "unknown",
+        pos: [parseFloat(v.lat), parseFloat(v.lon)] as [number, number],
+        bearing: parseInt(v.heading ?? "0"),
+        delay: parseInt(v.secsSinceReport ?? "0") > 60 ? 2 : 0,
+        occupancy: Math.round(30 + Math.random() * 60),
+      }));
+
     return vehicles.length ? vehicles : generateVehicles();
   } catch {
     return generateVehicles();
@@ -349,7 +338,7 @@ export const useNotifications= () => useQuery({ queryKey: ["notifications"],quer
 export const usePredictions  = () => useQuery({ queryKey: ["predictions"],  queryFn: mockApi.predictions });
 export const useAiCards      = () => useQuery({ queryKey: ["aiCards"],      queryFn: mockApi.aiCards,      staleTime: 120_000 });
 export const useHoods        = () => useQuery({ queryKey: ["hoods"],        queryFn: mockApi.hoods,        staleTime: 300_000 });
-export const useVehicles     = () => useQuery({ queryKey: ["vehicles"],     queryFn: mockApi.vehicles,     refetchInterval: 3_000 });
+export const useVehicles     = () => useQuery({ queryKey: ["vehicles"],     queryFn: mockApi.vehicles,     refetchInterval: 15_000 });
 export const useIncidents    = () => useQuery({ queryKey: ["incidents"],    queryFn: mockApi.incidents,    refetchInterval: 10_000 });
 export const useFleet        = () => useQuery({ queryKey: ["fleet"],        queryFn: mockApi.fleet });
 export const useOdPairs      = () => useQuery({ queryKey: ["odPairs"],      queryFn: mockApi.odPairs });
