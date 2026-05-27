@@ -338,7 +338,8 @@ export const useNotifications= () => useQuery({ queryKey: ["notifications"],quer
 export const usePredictions  = () => useQuery({ queryKey: ["predictions"],  queryFn: mockApi.predictions });
 export const useAiCards      = () => useQuery({ queryKey: ["aiCards"],      queryFn: mockApi.aiCards,      staleTime: 120_000 });
 export const useHoods        = () => useQuery({ queryKey: ["hoods"],        queryFn: mockApi.hoods,        staleTime: 300_000 });
-export const useVehicles     = () => useQuery({ queryKey: ["vehicles"],     queryFn: mockApi.vehicles,     refetchInterval: 15_000 });
+// useVehicles — uses Supabase Realtime (pushed from edge function every 15s)
+export { useRealtimeVehicles as useVehicles } from "@/hooks/useRealtimeVehicles";
 export const useIncidents    = () => useQuery({ queryKey: ["incidents"],    queryFn: mockApi.incidents,    refetchInterval: 10_000 });
 export const useFleet        = () => useQuery({ queryKey: ["fleet"],        queryFn: mockApi.fleet });
 export const useOdPairs      = () => useQuery({ queryKey: ["odPairs"],      queryFn: mockApi.odPairs });
