@@ -200,16 +200,31 @@ async function fetchDisruptions() {
 import { supabase } from "@/lib/supabase";
 
 async function fetchNetwork() {
+  // Always use mock NETWORK routes for map geometry (they have real path coordinates).
+  // Supabase tl_routes has metadata only (no shape/path data).
+  // We enrich mock routes with any Supabase metadata available.
   const { data: rawRoutes } = await supabase
     .from("tl_routes")
-    .select("*")
+    .select("route_id, route_short_name, route_long_name, route_type, route_color")
     .limit(250);
 
-  if (!rawRoutes?.length) return NETWORK;
+  // Build a lookup from Supabase for name overrides
+  const sbMeta: Record<string, { shortName: string; longName: string }> = {};
+  for (const r of rawRoutes ?? []) {
+    sbMeta[r.route_id] = {
+      shortName: r.route_short_name || r.route_id,
+      longName: r.route_long_name || "",
+    };
+  }
 
-  const routes: Route[] = rawRoutes.map((r, i) => mapRoute(r as Record<string, unknown>, i));
+  // Use mock routes (with paths) but override names from Supabase where available
+  const routes: Route[] = NETWORK.routes.map((r) => ({
+    ...r,
+    shortName: sbMeta[r.id]?.shortName ?? r.shortName,
+    longName: sbMeta[r.id]?.longName ?? r.longName,
+  }));
 
-  // Use a sample of stops (fetch 500 for perf)
+  // Fetch real stops from Supabase
   const { data: rawStops } = await supabase
     .from("tl_stops")
     .select("stop_id, stop_name, stop_lat, stop_lon")
