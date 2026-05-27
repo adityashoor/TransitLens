@@ -1,10 +1,11 @@
 /**
- * useRealtimeVehicles — live TTC vehicle positions via Supabase Realtime.
+ * useRealtimeVehicles — live TTC vehicle positions.
  *
- * Supabase fires one postgres_changes event PER ROW (638 rows = 638 events).
- * We debounce the re-fetch so all 638 events coalesce into a single DB call.
+ * Polls Supabase every 15s (vehicles refresh from edge function every ~30s).
+ * Avoids postgres_changes subscriptions which fire 638× per ingest and
+ * crash the browser with ERR_INSUFFICIENT_RESOURCES.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { generateVehicles } from "@/mock/data";
 
@@ -32,52 +33,44 @@ function dbRowToVehicle(row: Record<string, unknown>, i: number): RealtimeVehicl
   };
 }
 
-async function fetchAllVehicles() {
-  const { data, error } = await supabase.from("vehicle_positions").select("*");
-  if (!error && data && data.length > 0) return data.map(dbRowToVehicle);
-  return null;
-}
+const POLL_INTERVAL = 15_000;
 
 export function useRealtimeVehicles() {
   const [vehicles, setVehicles] = useState<RealtimeVehicle[]>([]);
   const [connected, setConnected] = useState(false);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    // Initial load
-    fetchAllVehicles().then((v) => {
-      if (v) { setVehicles(v); setConnected(true); }
-      else {
-        setVehicles(
-          generateVehicles().map((v, i) => ({
-            ...v, id: `mock-${i}`, speedKmh: 0, updatedAt: new Date().toISOString(),
-          }))
-        );
-      }
-    });
+    let cancelled = false;
 
-    const channel = supabase
-      .channel("transitlens-vehicles")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "vehicle_positions" },
-        () => {
-          // Debounce: 638 row events collapse into one fetch after 500ms silence
-          if (debounceTimer.current) clearTimeout(debounceTimer.current);
-          debounceTimer.current = setTimeout(() => {
-            fetchAllVehicles().then((v) => {
-              if (v) { setVehicles(v); setConnected(true); }
-            });
-          }, 500);
+    async function load() {
+      try {
+        const { data, error } = await supabase
+          .from("vehicle_positions")
+          .select("*");
+        if (cancelled) return;
+        if (!error && data && data.length > 0) {
+          setVehicles(data.map(dbRowToVehicle));
+          setConnected(true);
+        } else if (!connected) {
+          setVehicles(
+            generateVehicles().map((v, i) => ({
+              ...v, id: `mock-${i}`, speedKmh: 0, updatedAt: new Date().toISOString(),
+            }))
+          );
         }
-      )
-      .subscribe((status) => setConnected(status === "SUBSCRIBED"));
+      } catch {
+        // network error — keep showing last data
+      }
+    }
+
+    load();
+    const interval = setInterval(load, POLL_INTERVAL);
 
     return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      supabase.removeChannel(channel);
+      cancelled = true;
+      clearInterval(interval);
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { vehicles, connected };
 }
