@@ -29,7 +29,7 @@ function LiveMap() {
   const [stop, setStop] = useState<StopMeta | null>(null);
   const [query, setQuery] = useState("");
   const { data: net } = useNetwork();
-  const { data: vehicles = [] } = useVehicles();
+  const { vehicles = [] } = useVehicles();
   const [hourly] = useState(() => hourlyRidership());
 
   const filtered =
