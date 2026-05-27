@@ -3,12 +3,9 @@ import {
   Outlet,
   createRootRouteWithContext,
   useRouter,
-  HeadContent,
-  Scripts,
   Link,
 } from "@tanstack/react-router";
 import { MotionConfig } from "framer-motion";
-import appCss from "../styles.css?url";
 import { AppShell } from "@/components/layout/AppShell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useUI } from "@/store/ui";
@@ -53,38 +50,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "TransitLens — AI Transit Intelligence for Toronto" },
-      { name: "description", content: "Real-time transit analytics, AI ridership predictions, equity heatmaps, and disruption simulation for the TTC network." },
-      { property: "og:title", content: "TransitLens" },
-      { property: "og:description", content: "AI-powered transit intelligence platform." },
-      { property: "og:type", content: "website" },
-      { name: "theme-color", content: "#0c1320" },
-    ],
-    links: [{ rel: "stylesheet", href: appCss }],
-  }),
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en" className="dark">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
