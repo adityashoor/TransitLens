@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
     api_cache_enabled: bool = Field(default=False, validation_alias="API_CACHE_ENABLED")
     prediction_model_path: str | None = Field(default=None, validation_alias="PREDICTION_MODEL_PATH")
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        validation_alias="CORS_ORIGINS",
+    )
 
     model_config = SettingsConfigDict(env_file="backend/.env", extra="ignore")
 
@@ -28,6 +32,10 @@ class Settings(BaseSettings):
             self.database_url.replace("postgresql+psycopg://", "postgresql+asyncpg://")
             .replace("postgresql://", "postgresql+asyncpg://")
         )
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
