@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CloudSnow, CloudRain, Sun, Cloud, Zap } from "lucide-react";
-import { useWeather } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
+import { useWeather } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend,
 } from "recharts";
-import { fmtCompact } from "../lib/format";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/weather")({
+  head: () => ({ meta: [{ title: "Weather Impact — TransitLens" }] }),
   component: WeatherPage,
 });
 

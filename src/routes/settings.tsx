@@ -1,10 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useUI } from "../store/ui";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { Switch } from "../components/ui/switch";
+import { useUI } from "@/store/ui";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { Switch } from "@/components/ui/switch";
 import { Sun, Moon, Monitor } from "lucide-react";
 
 export const Route = createFileRoute("/settings")({
+  head: () => ({
+    meta: [
+      { title: "Settings — TransitLens" },
+      { name: "description", content: "Configure theme, dashboard preferences, map layers, and accessibility options." },
+    ],
+  }),
   component: Settings,
 });
 

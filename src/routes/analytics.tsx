@@ -1,14 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useDaily, useHourly, useYearly, useRouteCompare, useHeatmap } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
+import { useDaily, useHourly, useYearly, useRouteCompare, useHeatmap } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, Legend,
 } from "recharts";
 import { Download, Calendar, Filter } from "lucide-react";
-import { fmtCompact } from "../lib/format";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/analytics")({
+  head: () => ({
+    meta: [
+      { title: "Ridership Analytics — TransitLens" },
+      { name: "description", content: "Hourly, daily, and yearly TTC ridership analytics with route comparison and neighborhood heatmaps." },
+    ],
+  }),
   component: Analytics,
 });
 

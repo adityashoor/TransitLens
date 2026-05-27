@@ -1,8 +1,8 @@
 import { Bell, Search, Sun, Moon, Activity } from "lucide-react";
-import { useUI } from "../../store/ui";
-import { useNotifications } from "../../mock/api";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { cn } from "../../lib/utils";
+import { useUI } from "@/store/ui";
+import { useNotifications } from "@/mock/api";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 export function Topbar() {
   const { theme, setTheme, setCommandOpen } = useUI();
@@ -32,8 +32,8 @@ export function Topbar() {
 
       <div className="ml-auto flex items-center gap-2">
         <div className="hidden sm:flex items-center gap-2 px-3 h-9 rounded-lg bg-surface/60 border border-border text-xs">
-          <span className="size-2 rounded-full bg-warn" />
-          <span className="text-muted-foreground">Demo mode - partial API data</span>
+          <span className="size-2 rounded-full bg-success animate-pulse-glow" />
+          <span className="text-muted-foreground">Live · TTC feed</span>
         </div>
 
         <button

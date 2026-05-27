@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Network, TrendingUp, ArrowRightLeft } from "lucide-react";
-import { useOdPairs } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
-import { fmtCompact } from "../lib/format";
+import { useOdPairs } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/demand")({
+  head: () => ({ meta: [{ title: "Demand & OD — TransitLens" }] }),
   component: DemandPage,
 });
 

@@ -1,5 +1,5 @@
-import { ClientOnly } from "../ClientOnly";
-import { TransitMap } from "./TransitMap";
+import { ClientOnly } from "@/components/ClientOnly";
+import { TransitMap } from "@/components/map/TransitMap";
 import type { ComponentProps } from "react";
 
 export function MapBox(props: ComponentProps<typeof TransitMap>) {

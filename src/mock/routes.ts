@@ -1,4 +1,4 @@
-import { seeded } from "../lib/format";
+import { seeded } from "@/lib/format";
 
 export type LatLng = [number, number];
 export type TransitMode = "subway" | "streetcar" | "bus";

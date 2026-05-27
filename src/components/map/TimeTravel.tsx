@@ -1,6 +1,6 @@
 import { Play, Pause, Rewind, FastForward, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useUI } from "../../store/ui";
+import { useUI } from "@/store/ui";
 
 export function TimeTravel() {
   const { timeOffset, setTimeOffset } = useUI();

@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, Map, BarChart3, Sparkles, Activity, Route as RouteIcon } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/", label: "Home", icon: LayoutDashboard },

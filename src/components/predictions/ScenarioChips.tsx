@@ -1,6 +1,6 @@
-import { useUI, type Scenario } from "../../store/ui";
-import { SCENARIO_META } from "../../mock/predictions";
-import { cn } from "../../lib/utils";
+import { useUI, type Scenario } from "@/store/ui";
+import { SCENARIO_META } from "@/mock/predictions";
+import { cn } from "@/lib/utils";
 
 export function ScenarioChips() {
   const { scenario, setScenario } = useUI();

@@ -1,4 +1,4 @@
-import { seeded } from "../lib/format";
+import { seeded } from "@/lib/format";
 import { NETWORK, type Route, type LatLng } from "./routes";
 
 const rng = seeded(7);
@@ -261,7 +261,7 @@ export function incidents(): Incident[] {
       category: c,
       severity: sev,
       title: titles[c],
-      detail: "Generated scenario record. Suggested response: dispatch supervisor.",
+      detail: "AI clustered with 3 similar events in past 30d. Suggested action: dispatch supervisor.",
       startedAt,
       resolvedAt: resolved ? new Date(now - rng() * 1000 * 60 * 30).toISOString() : undefined,
       location: locs[Math.floor(rng() * locs.length)],

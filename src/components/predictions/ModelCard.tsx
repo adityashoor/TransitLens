@@ -1,6 +1,6 @@
 import { Cpu, RefreshCw, Database, Target } from "lucide-react";
-import { MODEL_CARD } from "../../mock/predictions";
-import { DataCard } from "../ui-ext/DataCard";
+import { MODEL_CARD } from "@/mock/predictions";
+import { DataCard } from "@/components/ui-ext/DataCard";
 
 export function ModelCard() {
   const items = [

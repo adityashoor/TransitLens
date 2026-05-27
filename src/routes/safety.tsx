@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ShieldAlert, Activity, AlertTriangle } from "lucide-react";
-import { useSafety, useNetwork } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
+import { useSafety, useNetwork } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip } from "recharts";
 
 export const Route = createFileRoute("/safety")({
+  head: () => ({ meta: [{ title: "Safety / Vision Zero — TransitLens" }] }),
   component: SafetyPage,
 });
 

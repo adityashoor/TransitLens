@@ -2,18 +2,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Search } from "lucide-react";
-import { MapBox } from "../components/map/MapBox";
-import { LayerControls } from "../components/map/LayerControls";
-import { TimeTravel } from "../components/map/TimeTravel";
-import { StopArrivalsPanel, type StopMeta } from "../components/map/StopArrivalsPanel";
-import { useNetwork, useVehicles } from "../mock/api";
-import type { Route as TransitRoute } from "../mock/routes";
+import { MapBox } from "@/components/map/MapBox";
+import { LayerControls } from "@/components/map/LayerControls";
+import { TimeTravel } from "@/components/map/TimeTravel";
+import { StopArrivalsPanel, type StopMeta } from "@/components/map/StopArrivalsPanel";
+import { useNetwork, useVehicles } from "@/mock/api";
+import type { Route as TransitRoute } from "@/mock/routes";
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip as RTooltip } from "recharts";
-import { hourlyRidership } from "../mock/data";
-import { StatusPill } from "../components/ui-ext/ChartCard";
-import { fmtCompact } from "../lib/format";
+import { hourlyRidership } from "@/mock/data";
+import { StatusPill } from "@/components/ui-ext/ChartCard";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/map")({
+  head: () => ({
+    meta: [
+      { title: "Live Map — TransitLens" },
+      { name: "description", content: "Real-time TTC vehicle tracking, route layers, stop arrivals, and time-travel replay." },
+      { property: "og:title", content: "TransitLens Live Map" },
+    ],
+  }),
   component: LiveMap,
 });
 

@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Brain, TrendingUp, TrendingDown } from "lucide-react";
-import { attributionsFor } from "../../mock/predictions";
-import { useUI } from "../../store/ui";
-import { cn } from "../../lib/utils";
+import { attributionsFor } from "@/mock/predictions";
+import { useUI } from "@/store/ui";
+import { cn } from "@/lib/utils";
 import { useEffect } from "react";
 
 export function WhyDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {

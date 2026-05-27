@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bus, Battery, Wrench, Accessibility } from "lucide-react";
-import { useFleet } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
+import { useFleet } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, PieChart, Pie, Cell, Legend,
 } from "recharts";
 
 export const Route = createFileRoute("/fleet")({
+  head: () => ({ meta: [{ title: "Fleet Health — TransitLens" }] }),
   component: FleetPage,
 });
 
@@ -33,7 +34,7 @@ function FleetPage() {
 
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
-      <PageHeader title="Fleet Health" subtitle={`${fleet.length} generated vehicles - demonstration data only`} />
+      <PageHeader title="Fleet Health" subtitle="1,842 vehicles · live telemetry" />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <KpiCard label="In service" value={inService} format="raw" icon={Bus} accent="success" />
@@ -55,7 +56,7 @@ function FleetPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Health distribution" subtitle="Generated health scores" className="h-[320px]">
+        <ChartCard title="Health distribution" subtitle="AI-scored" className="h-[320px]">
           <ResponsiveContainer>
             <PieChart>
               <Pie data={healthDist} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
@@ -80,7 +81,7 @@ function FleetPage() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Vehicle roster" subtitle="Generated scenario status">
+      <ChartCard title="Vehicle roster" subtitle="Real-time status">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">

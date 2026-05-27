@@ -4,8 +4,8 @@ import {
   LayoutDashboard, Map, BarChart3, Sparkles, Globe2, Activity, Route as RouteIcon, Settings, Train,
   ChevronLeft, Siren, Bus, Network, ShieldAlert, CloudSnow, Wallet,
 } from "lucide-react";
-import { useUI } from "../../store/ui";
-import { cn } from "../../lib/utils";
+import { useUI } from "@/store/ui";
+import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -42,7 +42,7 @@ export function Sidebar() {
         {!sidebarCollapsed && (
           <div className="overflow-hidden">
             <div className="font-semibold tracking-tight text-gradient text-lg leading-none">TransitLens</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Toronto - Demo</div>
+            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1">Toronto · Live</div>
           </div>
         )}
       </div>

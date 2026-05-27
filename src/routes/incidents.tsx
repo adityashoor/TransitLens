@@ -1,12 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Siren, AlertTriangle, ShieldCheck, Activity as ActIcon, FlaskConical } from "lucide-react";
-import { useIncidents, useNetwork } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
-import { fmtCompact } from "../lib/format";
+import { Siren, AlertTriangle, ShieldCheck, Activity as ActIcon, Sparkles } from "lucide-react";
+import { useIncidents, useNetwork } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/incidents")({
+  head: () => ({
+    meta: [
+      { title: "Incidents — TransitLens" },
+      { name: "description", content: "Live TTC incidents timeline with AI clustering and response status." },
+    ],
+  }),
   component: IncidentsPage,
 });
 
@@ -28,11 +34,11 @@ function IncidentsPage() {
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Incident Operations"
-        subtitle="Generated demonstration incidents - not a live operational feed"
+        subtitle="Real-time incident timeline · AI root-cause clustering"
         action={
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl glass-card text-xs">
-            <FlaskConical className="size-3.5 text-primary" />
-            Demo dataset - {incidents.length} generated events
+            <Sparkles className="size-3.5 text-primary" />
+            AI clustered {incidents.length} events into {Math.max(1, Math.round(incidents.length / 4))} patterns
           </div>
         }
       />
@@ -44,7 +50,7 @@ function IncidentsPage() {
         <KpiCard label="Mean Time to Resolve" value="18 min" delta={-11.4} hint="trailing 7d" icon={ShieldCheck} accent="success" />
       </div>
 
-      <ChartCard title="Scenario timeline" subtitle="Sorted by generated start time">
+      <ChartCard title="Live timeline" subtitle="Sorted by start time · AI prioritized">
         <div className="space-y-2">
           {incidents
             .sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt))

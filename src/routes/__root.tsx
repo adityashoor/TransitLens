@@ -1,9 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, createRootRouteWithContext, useRouter, Link } from "@tanstack/react-router";
+import {
+  Outlet,
+  createRootRouteWithContext,
+  useRouter,
+  Link,
+} from "@tanstack/react-router";
 import { MotionConfig } from "framer-motion";
-import { AppShell } from "../components/layout/AppShell";
-import { CommandPalette } from "../components/CommandPalette";
-import { useUI } from "../store/ui";
+import { AppShell } from "@/components/layout/AppShell";
+import { CommandPalette } from "@/components/CommandPalette";
+import { useUI } from "@/store/ui";
 import { useEffect } from "react";
 
 function NotFoundComponent() {
@@ -65,9 +70,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <MotionConfig reducedMotion={reducedMotion ? "always" : "never"}>
         <AppShell>
-          <main id="main-content">
-            <Outlet />
-          </main>
+          <Outlet />
         </AppShell>
         <CommandPalette />
       </MotionConfig>

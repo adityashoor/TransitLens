@@ -1,6 +1,6 @@
 import { Layers, Train, TramFront, Bus, MapPin, Flame, Bike, Car, Eye, EyeOff } from "lucide-react";
-import { useUI } from "../../store/ui";
-import { cn } from "../../lib/utils";
+import { useUI } from "@/store/ui";
+import { cn } from "@/lib/utils";
 
 const LAYER_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; hint: string }> = {
   routes: { label: "Routes", icon: Train, hint: "Subway, streetcar & bus lines" },

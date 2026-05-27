@@ -1,4 +1,4 @@
-import type { Scenario } from "../store/ui";
+import type { Scenario } from "@/store/ui";
 
 export const SCENARIO_META: Record<Scenario, {
   label: string;

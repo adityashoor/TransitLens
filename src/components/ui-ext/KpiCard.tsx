@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { cn } from "../../lib/utils";
-import { fmtCompact } from "../../lib/format";
+import { cn } from "@/lib/utils";
+import { fmtCompact } from "@/lib/format";
 import type { LucideIcon } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area } from "recharts";
 

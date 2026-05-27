@@ -1,13 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Wallet, TrendingDown, TrendingUp, Scale } from "lucide-react";
-import { useBudget } from "../mock/api";
-import { ChartCard, PageHeader } from "../components/ui-ext/ChartCard";
-import { KpiCard } from "../components/ui-ext/KpiCard";
+import { useBudget } from "@/mock/api";
+import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
 import {
   ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, ZAxis,
 } from "recharts";
 
 export const Route = createFileRoute("/budget")({
+  head: () => ({ meta: [{ title: "Budget & Subsidy — TransitLens" }] }),
   component: BudgetPage,
 });
 

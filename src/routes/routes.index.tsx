@@ -2,29 +2,32 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Search, Filter } from "lucide-react";
-import { useLiveRoutes } from "../mock/api";
-import { PageHeader, StatusPill } from "../components/ui-ext/ChartCard";
-import { fmtCompact } from "../lib/format";
+import { useNetwork } from "@/mock/api";
+import { PageHeader, StatusPill } from "@/components/ui-ext/ChartCard";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/routes/")({
+  head: () => ({
+    meta: [
+      { title: "Route Explorer — TransitLens" },
+      { name: "description", content: "Browse and analyze every TTC route: ridership, congestion, AI performance scores, and trends." },
+    ],
+  }),
   component: RouteExplorer,
 });
 
 function RouteExplorer() {
-  const { data: routes = [], isLoading } = useLiveRoutes();
+  const { data: net } = useNetwork();
   const [q, setQ] = useState("");
   const [mode, setMode] = useState<string>("all");
 
-  const filtered = routes
+  const filtered = (net?.routes ?? [])
     .filter((r) => mode === "all" || r.mode === mode)
     .filter((r) => !q || `${r.shortName} ${r.longName}`.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
-      <PageHeader
-        title="Route Explorer"
-        subtitle={`${filtered.length} of ${routes.length} routes`}
-      />
+      <PageHeader title="Route Explorer" subtitle={`${filtered.length} of ${net?.routes.length ?? 0} routes`} />
 
       <div className="glass-card rounded-2xl p-4 mb-4 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
@@ -49,10 +52,6 @@ function RouteExplorer() {
           ))}
         </div>
       </div>
-
-      {isLoading && (
-        <div className="text-sm text-muted-foreground text-center py-12">Loading routes…</div>
-      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {filtered.map((r, i) => (

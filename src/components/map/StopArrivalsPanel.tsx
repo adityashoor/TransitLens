@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { Bus, X } from "lucide-react";
-import type { Route as TransitRoute } from "../../mock/routes";
-import { seeded } from "../../lib/format";
-import { useNetwork } from "../../mock/api";
+import type { Route as TransitRoute } from "@/mock/routes";
+import { seeded } from "@/lib/format";
+import { useNetwork } from "@/mock/api";
 
 export interface StopMeta {
   id: string;

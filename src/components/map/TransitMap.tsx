@@ -1,9 +1,9 @@
 import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip, Polygon, useMap } from "react-leaflet";
 import { useEffect } from "react";
-import type { Route, LatLng } from "../../mock/routes";
-import { useNetwork, useVehicles, useHoods } from "../../mock/api";
-import type { Hood } from "../../mock/data";
-import { useUI } from "../../store/ui";
+import type { Route, LatLng } from "@/mock/routes";
+import { useNetwork, useVehicles, useHoods } from "@/mock/api";
+import type { Hood } from "@/mock/data";
+import { useUI } from "@/store/ui";
 import { MapActions } from "./MapActions";
 import type { StopMeta } from "./StopArrivalsPanel";
 
@@ -31,7 +31,6 @@ interface TransitMapProps {
   zoom?: number;
   className?: string;
   withActions?: boolean;
-  overridePath?: [number, number][];
 }
 
 function colorForScore(v: number) {
@@ -55,7 +54,6 @@ export function TransitMap({
   zoom = 11,
   className,
   withActions = false,
-  overridePath,
 }: TransitMapProps) {
   const { data: net } = useNetwork();
   const { data: vehicles = [] } = useVehicles();
@@ -110,23 +108,10 @@ export function TransitMap({
           </Polygon>
         ))}
 
-        {/* Backend shape override for highlighted route */}
-        {overridePath && overridePath.length > 0 && highlightRouteId && (
-          <>
-            <FitBounds pts={overridePath} />
-            <Polyline
-              positions={overridePath}
-              pathOptions={{ color: "#1f7de8", weight: 5, opacity: 0.9 }}
-            />
-          </>
-        )}
-
         {mapLayers.routes && net?.routes.map((r) => {
           const isHi = highlightRouteId === r.id;
           const dim = highlightRouteId && !isHi;
           const disabled = disabledRouteIds?.has(r.id);
-          // If backend shape override supplied, skip drawing the mock path for highlighted route
-          if (isHi && overridePath && overridePath.length > 0) return null;
           return (
             <Polyline
               key={r.id}

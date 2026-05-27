@@ -3,16 +3,23 @@ import { motion } from "framer-motion";
 import {
   Users, Bus, AlarmClock, Timer, Scale, Activity, ArrowRight, AlertTriangle, Sparkles, MapPin,
 } from "lucide-react";
-import { useKpis, useDisruptions, useHourly, useNetwork, useAiCards, useLiveRoutes, useSurfaceRidership } from "../mock/api";
-import { KpiCard } from "../components/ui-ext/KpiCard";
-import { ChartCard, PageHeader, StatusPill } from "../components/ui-ext/ChartCard";
-import { MapBox } from "../components/map/MapBox";
+import { useKpis, useDisruptions, useHourly, useNetwork, useAiCards } from "@/mock/api";
+import { KpiCard } from "@/components/ui-ext/KpiCard";
+import { ChartCard, PageHeader, StatusPill } from "@/components/ui-ext/ChartCard";
+import { MapBox } from "@/components/map/MapBox";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, BarChart, Bar,
 } from "recharts";
-import { fmtCompact } from "../lib/format";
+import { fmtCompact } from "@/lib/format";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Dashboard — TransitLens" },
+      { name: "description", content: "Executive overview of Toronto's transit network: live KPIs, AI summary, disruptions, and ridership trends." },
+      { property: "og:title", content: "TransitLens Dashboard" },
+    ],
+  }),
   component: Dashboard,
 });
 
@@ -22,26 +29,9 @@ function Dashboard() {
   const { data: hourly = [] } = useHourly();
   const { data: net } = useNetwork();
   const { data: aiCards = [] } = useAiCards();
-  const { data: liveRoutes = [] } = useLiveRoutes();
-  const { data: surfaceRidership = [] } = useSurfaceRidership(6);
 
   const sparkA = hourly.map((h) => h.riders / 1000);
-
-  // Top routes: prefer real surface ridership from backend, fall back to mock routes
-  const topRoutes = surfaceRidership.length > 0
-    ? surfaceRidership.slice(0, 6).map((s) => {
-        const live = liveRoutes.find((r) => r.id === s.route_id);
-        return {
-          shortName: s.route_short_name ?? s.route_name ?? s.route_id,
-          ridership: s.all_day_riders ?? 0,
-          color: live?.color ?? "var(--electric)",
-        };
-      })
-    : [...(net?.routes ?? [])].sort((a, b) => b.ridership - a.ridership).slice(0, 6).map((r) => ({
-        shortName: r.shortName,
-        ridership: r.ridership,
-        color: r.color,
-      }));
+  const topRoutes = [...(net?.routes ?? [])].sort((a, b) => b.ridership - a.ridership).slice(0, 6);
 
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
@@ -155,7 +145,7 @@ function Dashboard() {
           action={<Link to="/routes" className="text-xs text-primary inline-flex items-center gap-1">View all <ArrowRight className="size-3" /></Link>}
         >
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={topRoutes.map((r) => ({ name: r.shortName, riders: Math.round(r.ridership / 1000), color: r.color }))} layout="vertical" margin={{ left: 12 }}>
+            <BarChart data={topRoutes.map((r) => ({ name: r.shortName, riders: r.ridership / 1000, color: r.color }))} layout="vertical" margin={{ left: 12 }}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" horizontal={false} />
               <XAxis type="number" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis dataKey="name" type="category" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} width={36} />
@@ -176,9 +166,9 @@ function Dashboard() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Route status board" subtitle={`${liveRoutes.length || net?.routes.length || 0} routes · live`} className="mb-6">
+      <ChartCard title="Route status board" subtitle="20 routes · live" className="mb-6">
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-3">
-          {(liveRoutes.length > 0 ? liveRoutes : net?.routes ?? []).map((r) => (
+          {net?.routes.map((r) => (
             <Link
               key={r.id}
               to="/routes/$id"

@@ -2,9 +2,9 @@ import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator,
-} from "./ui/command";
-import { useUI } from "../store/ui";
-import { useNetwork, useHoods } from "../mock/api";
+} from "@/components/ui/command";
+import { useUI } from "@/store/ui";
+import { useNetwork, useHoods } from "@/mock/api";
 import {
   LayoutDashboard, Map, BarChart3, Sparkles, Activity, Route as RouteIcon,
   Settings, Scale, Sun, Moon, MapPin,
