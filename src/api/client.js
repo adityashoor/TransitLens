@@ -8,7 +8,7 @@ import * as mock from "../data/mockData";
 
 const BASE_URL =
   import.meta.env.VITE_API_URL ||
-  "https://transitlens-backend.up.railway.app";
+  (import.meta.env.DEV ? "http://localhost:8000" : "https://transitlens-backend.up.railway.app");
 
 const TIMEOUT_MS = 8000;
 

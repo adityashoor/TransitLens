@@ -125,6 +125,7 @@ app = FastAPI(
 
 ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "http://localhost:4173",
     "https://transit-lens.vercel.app",
     os.getenv("FRONTEND_URL", ""),
