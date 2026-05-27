@@ -196,58 +196,70 @@ async function fetchDisruptions() {
   }
 }
 
-// ── Real API fetchers ─────────────────────────────────────────────────────────
+// ── Supabase fetchers (replaces Railway backend) ──────────────────────────────
+import { supabase } from "@/lib/supabase";
 
 async function fetchNetwork() {
-  const [rawRoutes, rawStops] = await Promise.all([
-    get<Record<string, unknown>[]>("/api/gtfs/routes?limit=200", () => []),
-    get<Record<string, unknown>[]>("/api/gtfs/stops?limit=500", () => []),
-  ]);
+  const { data: rawRoutes } = await supabase
+    .from("tl_routes")
+    .select("*")
+    .limit(250);
 
-  if (!rawRoutes.length) return NETWORK;
+  if (!rawRoutes?.length) return NETWORK;
 
-  const routes: Route[] = rawRoutes.map(mapRoute);
-  const stops = rawStops.map((s) => ({
+  const routes: Route[] = rawRoutes.map((r, i) => mapRoute(r as Record<string, unknown>, i));
+
+  // Use a sample of stops (fetch 500 for perf)
+  const { data: rawStops } = await supabase
+    .from("tl_stops")
+    .select("stop_id, stop_name, stop_lat, stop_lon")
+    .limit(500);
+
+  const stops = (rawStops ?? []).map((s) => ({
     id: s.stop_id as string,
     name: s.stop_name as string,
     pos: [s.stop_lat as number, s.stop_lon as number] as [number, number],
     routeIds: [],
     boardings: Math.round(200 + Math.random() * 2000),
   }));
-  return { routes, stops };
+
+  return { routes, stops: stops.length ? stops : NETWORK.stops };
 }
 
 async function fetchKpis() {
   const mock = kpiSnapshot();
-  const data = await get<Record<string, unknown>>("/api/kpi", () => ({}));
-  if (!Object.keys(data).length) return mock;
+  const [{ data }, { count: vehicleCount }] = await Promise.all([
+    supabase.from("tl_kpi").select("*").eq("id", 1).single(),
+    supabase.from("vehicle_positions").select("*", { count: "exact", head: true }),
+  ]);
+  if (!data) return mock;
   return {
     ...mock,
-    dailyRiders: (data.dailyRidership as number) ?? mock.dailyRiders,
-    equityScore: (data.avgEquityScore as number) ?? mock.equityScore,
-    activeVehicles: mock.activeVehicles,
-    delayedRoutes: mock.delayedRoutes,
-    avgWait: mock.avgWait,
-    congestionIndex: mock.congestionIndex,
+    dailyRiders: data.daily_ridership ?? mock.dailyRiders,
+    activeVehicles: vehicleCount ?? data.active_vehicles ?? mock.activeVehicles,
+    delayedRoutes: data.delayed_routes ?? mock.delayedRoutes,
+    avgWait: data.avg_wait ?? mock.avgWait,
+    congestionIndex: data.congestion_index ?? mock.congestionIndex,
+    equityScore: data.equity_score ?? mock.equityScore,
   };
 }
 
 async function fetchHourly() {
-  const [ts, pred] = await Promise.all([
-    get<Record<string, unknown>[]>("/api/ridership/timeseries", () => []),
-    get<Record<string, unknown>[]>("/api/ridership/predict", () => []),
-  ]);
-  if (!ts.length) return hourlyRidership();
-  return ts.map((row, i) => ({
+  const { data } = await supabase
+    .from("tl_ridership_hourly")
+    .select("*")
+    .order("hour");
+  if (!data?.length) return hourlyRidership();
+  return data.map((row) => ({
     hour: row.hour as string,
-    riders: (row.actual as number) ?? 0,
-    predicted: pred[i]?.predicted ?? (row.predicted as number) ?? 0,
+    riders: row.actual as number,
+    predicted: row.predicted as number,
   }));
 }
 
 async function fetchHoods() {
-  const data = await get<Record<string, unknown>[]>("/api/equity/scores", () => []);
-  if (!data.length) return HOODS;
+  const { data } = await supabase.from("tl_equity").select("*");
+  if (!data?.length) return HOODS;
   return data.map((z) => ({
     id: z.id as string,
     name: z.name as string,
@@ -257,27 +269,27 @@ async function fetchHoods() {
       [(z.lat as number) + 0.018, (z.lng as number) + 0.018],
       [(z.lat as number) + 0.018, (z.lng as number) - 0.018],
     ] as [number, number][],
-    mobilityScore: z.equityScore as number,
-    stopDensity: z.stopDensity as number,
-    avgWait: Math.round(2 + (100 - (z.equityScore as number)) / 10),
-    income: (z.equityScore as number) > 70 ? "high" : (z.equityScore as number) > 50 ? "mid" : "low",
+    mobilityScore: z.equity_score as number,
+    stopDensity: z.stop_density as number,
+    avgWait: Math.round(2 + (100 - (z.equity_score as number)) / 10),
+    income: (z.equity_score as number) > 70 ? "high" : (z.equity_score as number) > 50 ? "mid" : "low",
   })) as typeof HOODS;
 }
 
 async function fetchAiCards() {
-  const meta = await get<Record<string, unknown>>("/api/model/metrics", () => ({}));
-  if (!Object.keys(meta).length) return aiCards;
+  const { data: meta } = await supabase.from("tl_model_metrics").select("*").eq("id", 1).single();
+  if (!meta) return aiCards;
   return [
     {
       title: "Model Accuracy",
-      value: `${meta.accuracy_pct ?? 87.5}%`,
-      delta: +(((meta.r2 as number) ?? 0.92) * 10 - 8.5).toFixed(1),
+      value: `${meta.accuracy_pct ?? 90}%`,
+      delta: +(((meta.r2 as number) ?? 0.9762) * 10 - 8.5).toFixed(1),
       hint: `R²=${meta.r2 ?? "—"} · MAE=${meta.mae ?? "—"}`,
       icon: "activity",
     },
     {
       title: "Routes Analysed",
-      value: "232",
+      value: `${meta.routes_analysed ?? 232}`,
       delta: 2.1,
       hint: "Real TTC GTFS data",
       icon: "users",
