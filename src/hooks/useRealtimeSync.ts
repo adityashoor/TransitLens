@@ -1,21 +1,22 @@
 /**
- * useRealtimeSync — subscribes to TransitLens Supabase tables via Realtime
- * and invalidates the matching TanStack Query cache key on change.
- * Debounced per-key to avoid rapid-fire refetches.
- * Mount once at the app root.
+ * useRealtimeSync — subscribes to all TransitLens Supabase tables via Realtime.
+ * On any row change, immediately invalidates the matching TanStack Query keys
+ * so every page re-fetches fresh data without waiting for the poll interval.
+ *
+ * Debounced per key (300ms) to coalesce rapid bursts into one refetch.
+ * Mount once inside QueryClientProvider at the app root.
  */
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
-// table → query keys to invalidate
+// Maps Supabase table → query keys to invalidate on change
 const TABLE_TO_QUERY: Record<string, string[]> = {
   tl_kpi:              ["kpis"],
-  tl_ridership_hourly: ["hourly"],
-  tl_equity:           ["hoods"],
-  tl_routes:           ["network"],
+  tl_ridership_hourly: ["hourly", "daily"],
+  tl_equity:           ["hoods", "heatmap"],
+  tl_routes:           ["network", "routeCompare"],
   tl_model_metrics:    ["aiCards"],
-  // vehicle_positions handled by useRealtimeVehicles — skip here
 };
 
 export function useRealtimeSync() {
@@ -23,7 +24,6 @@ export function useRealtimeSync() {
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
-    // Debounced invalidate — coalesces rapid bursts into one refetch
     function invalidate(keys: string[]) {
       keys.forEach((k) => {
         clearTimeout(timers.current[k]);

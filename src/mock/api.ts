@@ -411,25 +411,37 @@ export const mockApi = {
   bunching:     async () => (await wait(100), bunching()),
 };
 
-// ── Hooks (same names, same signatures — route files unchanged) ───────────────
-export const useKpis         = () => useQuery({ queryKey: ["kpis"],         queryFn: mockApi.kpis,         refetchInterval: 30_000 });
-export const useNetwork      = () => useQuery({ queryKey: ["network"],      queryFn: mockApi.network,      staleTime: 60_000 });
-export const useHourly       = () => useQuery({ queryKey: ["hourly"],       queryFn: mockApi.hourly,       refetchInterval: 60_000 });
-export const useDaily        = () => useQuery({ queryKey: ["daily"],        queryFn: mockApi.daily });
-export const useYearly       = () => useQuery({ queryKey: ["yearly"],       queryFn: mockApi.yearly,       staleTime: 3_600_000 }); // 1h — dataset is daily
-export const useRouteCompare = () => useQuery({ queryKey: ["routeCompare"], queryFn: mockApi.routeCompare });
-export const useHeatmap      = () => useQuery({ queryKey: ["heatmap"],      queryFn: mockApi.heatmap });
-export const useDisruptions  = () => useQuery({ queryKey: ["disruptions"],  queryFn: mockApi.disruptions,  refetchInterval: 20_000 });
-export const useNotifications= () => useQuery({ queryKey: ["notifications"],queryFn: mockApi.notifications });
-export const usePredictions  = () => useQuery({ queryKey: ["predictions"],  queryFn: mockApi.predictions });
-export const useAiCards      = () => useQuery({ queryKey: ["aiCards"],      queryFn: mockApi.aiCards,      staleTime: 120_000 });
-export const useHoods        = () => useQuery({ queryKey: ["hoods"],        queryFn: mockApi.hoods,        staleTime: 300_000 });
-// useVehicles — uses Supabase Realtime (pushed from edge function every 15s)
+// ── Hooks ─────────────────────────────────────────────────────────────────────
+//
+// Refresh strategy:
+//   Supabase tables  → useRealtimeSync pushes invalidation + refetchInterval as fallback
+//   External APIs    → refetchInterval only (no Realtime push available)
+//   Daily/static     → long staleTime, refetchOnWindowFocus only
+//
+const LIVE   = { refetchInterval: 30_000,  refetchOnWindowFocus: true } as const; // KPIs, vehicles
+const FAST   = { refetchInterval: 20_000,  refetchOnWindowFocus: true } as const; // disruptions
+const STD    = { refetchInterval: 60_000,  refetchOnWindowFocus: true } as const; // hourly charts
+const SLOW   = { refetchInterval: 300_000, refetchOnWindowFocus: true } as const; // weather, incidents
+const STATIC = { staleTime: 3_600_000,     refetchOnWindowFocus: true } as const; // routes, equity, yearly
+
+export const useKpis         = () => useQuery({ queryKey: ["kpis"],         queryFn: mockApi.kpis,         ...LIVE   });
+export const useNetwork      = () => useQuery({ queryKey: ["network"],      queryFn: mockApi.network,      ...STATIC });
+export const useHourly       = () => useQuery({ queryKey: ["hourly"],       queryFn: mockApi.hourly,       ...STD    });
+export const useDaily        = () => useQuery({ queryKey: ["daily"],        queryFn: mockApi.daily,        ...STD    });
+export const useYearly       = () => useQuery({ queryKey: ["yearly"],       queryFn: mockApi.yearly,       ...STATIC });
+export const useRouteCompare = () => useQuery({ queryKey: ["routeCompare"], queryFn: mockApi.routeCompare, ...STD    });
+export const useHeatmap      = () => useQuery({ queryKey: ["heatmap"],      queryFn: mockApi.heatmap,      ...SLOW   });
+export const useDisruptions  = () => useQuery({ queryKey: ["disruptions"],  queryFn: mockApi.disruptions,  ...FAST   });
+export const useNotifications= () => useQuery({ queryKey: ["notifications"],queryFn: mockApi.notifications,...SLOW   });
+export const usePredictions  = () => useQuery({ queryKey: ["predictions"],  queryFn: mockApi.predictions,  ...STD    });
+export const useAiCards      = () => useQuery({ queryKey: ["aiCards"],      queryFn: mockApi.aiCards,      ...STATIC });
+export const useHoods        = () => useQuery({ queryKey: ["hoods"],        queryFn: mockApi.hoods,        ...STATIC });
+// useVehicles — polls Supabase every 15s (see useRealtimeVehicles)
 export { useRealtimeVehicles as useVehicles } from "@/hooks/useRealtimeVehicles";
-export const useIncidents    = () => useQuery({ queryKey: ["incidents"],    queryFn: mockApi.incidents,    staleTime: 300_000, refetchInterval: 300_000 }); // 5min — Toronto Open Data updates daily
-export const useFleet        = () => useQuery({ queryKey: ["fleet"],        queryFn: mockApi.fleet });
-export const useOdPairs      = () => useQuery({ queryKey: ["odPairs"],      queryFn: mockApi.odPairs });
-export const useSafety       = () => useQuery({ queryKey: ["safety"],       queryFn: mockApi.safety });
-export const useWeather      = () => useQuery({ queryKey: ["weather"],      queryFn: mockApi.weather });
-export const useBudget       = () => useQuery({ queryKey: ["budget"],       queryFn: mockApi.budget });
-export const useBunching     = () => useQuery({ queryKey: ["bunching"],     queryFn: mockApi.bunching,     refetchInterval: 8_000 });
+export const useIncidents    = () => useQuery({ queryKey: ["incidents"],    queryFn: mockApi.incidents,    ...SLOW   }); // Toronto Open Data — daily feed
+export const useFleet        = () => useQuery({ queryKey: ["fleet"],        queryFn: mockApi.fleet,        ...STD    });
+export const useOdPairs      = () => useQuery({ queryKey: ["odPairs"],      queryFn: mockApi.odPairs,      ...SLOW   });
+export const useSafety       = () => useQuery({ queryKey: ["safety"],       queryFn: mockApi.safety,       ...SLOW   });
+export const useWeather      = () => useQuery({ queryKey: ["weather"],      queryFn: mockApi.weather,      ...SLOW   }); // Open-Meteo — 15min updates
+export const useBudget       = () => useQuery({ queryKey: ["budget"],       queryFn: mockApi.budget,       ...STATIC });
+export const useBunching     = () => useQuery({ queryKey: ["bunching"],     queryFn: mockApi.bunching,     ...STD    });
