@@ -1,39 +1,49 @@
 /**
- * useRealtimeSync — subscribes to all TransitLens Supabase tables via
- * Realtime and invalidates the matching TanStack Query cache key on any change.
- * Mount once at the app root — all pages auto-update without polling.
+ * useRealtimeSync — subscribes to TransitLens Supabase tables via Realtime
+ * and invalidates the matching TanStack Query cache key on change.
+ * Debounced per-key to avoid rapid-fire refetches.
+ * Mount once at the app root.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
+// table → query keys to invalidate
 const TABLE_TO_QUERY: Record<string, string[]> = {
   tl_kpi:              ["kpis"],
   tl_ridership_hourly: ["hourly"],
   tl_equity:           ["hoods"],
   tl_routes:           ["network"],
   tl_model_metrics:    ["aiCards"],
-  vehicle_positions:   ["kpis"],   // vehicle count rolls into KPIs
+  // vehicle_positions handled by useRealtimeVehicles — skip here
 };
 
 export function useRealtimeSync() {
   const queryClient = useQueryClient();
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
+    // Debounced invalidate — coalesces rapid bursts into one refetch
+    function invalidate(keys: string[]) {
+      keys.forEach((k) => {
+        clearTimeout(timers.current[k]);
+        timers.current[k] = setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: [k] });
+        }, 300);
+      });
+    }
+
     const channels = Object.entries(TABLE_TO_QUERY).map(([table, keys]) =>
       supabase
         .channel(`rt-${table}`)
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table },
-          () => {
-            keys.forEach((k) => queryClient.invalidateQueries({ queryKey: [k] }));
-          }
+        .on("postgres_changes", { event: "*", schema: "public", table }, () =>
+          invalidate(keys)
         )
         .subscribe()
     );
 
     return () => {
+      Object.values(timers.current).forEach(clearTimeout);
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, [queryClient]);

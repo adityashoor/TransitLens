@@ -228,15 +228,12 @@ async function fetchNetwork() {
 
 async function fetchKpis() {
   const mock = kpiSnapshot();
-  const [{ data }, { count: vehicleCount }] = await Promise.all([
-    supabase.from("tl_kpi").select("*").eq("id", 1).single(),
-    supabase.from("vehicle_positions").select("*", { count: "exact", head: true }),
-  ]);
+  const { data } = await supabase.from("tl_kpi").select("*").eq("id", 1).single();
   if (!data) return mock;
   return {
     ...mock,
     dailyRiders: data.daily_ridership ?? mock.dailyRiders,
-    activeVehicles: vehicleCount ?? data.active_vehicles ?? mock.activeVehicles,
+    activeVehicles: data.active_vehicles ?? mock.activeVehicles,
     delayedRoutes: data.delayed_routes ?? mock.delayedRoutes,
     avgWait: data.avg_wait ?? mock.avgWait,
     congestionIndex: data.congestion_index ?? mock.congestionIndex,
