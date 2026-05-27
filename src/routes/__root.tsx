@@ -9,6 +9,7 @@ import { MotionConfig } from "framer-motion";
 import { AppShell } from "@/components/layout/AppShell";
 import { CommandPalette } from "@/components/CommandPalette";
 import { useUI } from "@/store/ui";
+import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useEffect } from "react";
 
 function NotFoundComponent() {
@@ -55,6 +56,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+function RealtimeSyncMount() {
+  useRealtimeSync();
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const { reducedMotion, theme, highContrast } = useUI();
@@ -68,6 +74,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <RealtimeSyncMount />
       <MotionConfig reducedMotion={reducedMotion ? "always" : "never"}>
         <AppShell>
           <Outlet />
