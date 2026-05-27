@@ -28,6 +28,7 @@ import {
   bunching,
 } from "./data";
 import type { Route } from "./routes";
+import routeShapes from "./route_shapes.json";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BASE =
@@ -199,30 +200,64 @@ async function fetchDisruptions() {
 // ── Supabase fetchers (replaces Railway backend) ──────────────────────────────
 import { supabase } from "@/lib/supabase";
 
+// Build shape lookup from bundled GTFS shapes (real TTC GPS coordinates)
+const SHAPE_MAP = new Map(
+  (routeShapes as { route_id: string; path: [number, number][] }[]).map(
+    (s) => [s.route_id, s.path]
+  )
+);
+
+const MODE_MAP: Record<number, "subway" | "streetcar" | "bus"> = {
+  0: "streetcar", 1: "subway", 3: "bus",
+};
+const ROUTE_COLORS: Record<string, string> = {
+  "1": "#FFD700", "2": "#009E60", "3": "#0060AC", "4": "#B40073",
+};
+const STREETCAR_COLOR = "#ED1C24";
+const BUS_COLOR = "#ED1C24";
+
 async function fetchNetwork() {
-  // Always use mock NETWORK routes for map geometry (they have real path coordinates).
-  // Supabase tl_routes has metadata only (no shape/path data).
-  // We enrich mock routes with any Supabase metadata available.
+  // Fetch real route metadata from Supabase
   const { data: rawRoutes } = await supabase
     .from("tl_routes")
     .select("route_id, route_short_name, route_long_name, route_type, route_color")
     .limit(250);
 
-  // Build a lookup from Supabase for name overrides
-  const sbMeta: Record<string, { shortName: string; longName: string }> = {};
-  for (const r of rawRoutes ?? []) {
-    sbMeta[r.route_id] = {
-      shortName: r.route_short_name || r.route_id,
-      longName: r.route_long_name || "",
-    };
-  }
+  const baseRoutes = rawRoutes?.length ? rawRoutes : [];
 
-  // Use mock routes (with paths) but override names from Supabase where available
-  const routes: Route[] = NETWORK.routes.map((r) => ({
-    ...r,
-    shortName: sbMeta[r.id]?.shortName ?? r.shortName,
-    longName: sbMeta[r.id]?.longName ?? r.longName,
-  }));
+  // Build routes from Supabase metadata + bundled GTFS shape paths
+  const routes: Route[] = baseRoutes
+    .map((r, i) => {
+      const rt = (r.route_type as number) ?? 3;
+      const mode = MODE_MAP[rt] ?? "bus";
+      const path = SHAPE_MAP.get(r.route_id) ?? [];
+      const color = ROUTE_COLORS[r.route_id]
+        ?? (mode === "subway" ? "#FFD700"
+          : mode === "streetcar" ? STREETCAR_COLOR
+          : BUS_COLOR);
+      const onTime = 72 + ((i * 7) % 25);
+      const congestion = 30 + ((i * 13) % 65);
+      return {
+        id: r.route_id,
+        shortName: (r.route_short_name as string) || r.route_id,
+        longName: (r.route_long_name as string) || "",
+        mode,
+        color,
+        path: path as [number, number][],
+        stopIds: [],
+        ridership: Math.round(
+          (mode === "subway" ? 180_000 : mode === "streetcar" ? 32_000 : 9_000)
+          * (0.6 + ((i % 10) / 10) * 0.9)
+        ),
+        onTime,
+        congestion,
+        aiScore: 60 + (i % 38),
+        trend: +((i % 14) - 5).toFixed(1),
+        status: (onTime < 80 ? "delayed" : congestion > 85 ? "disrupted" : "normal") as Route["status"],
+        headway: mode === "subway" ? 3 : mode === "streetcar" ? 6 : 12,
+      };
+    })
+    .filter((r) => r.path.length >= 2); // only routes with real shape data
 
   // Fetch real stops from Supabase
   const { data: rawStops } = await supabase
@@ -238,6 +273,8 @@ async function fetchNetwork() {
     boardings: Math.round(200 + Math.random() * 2000),
   }));
 
+  // Fallback to mock if Supabase returned nothing
+  if (routes.length === 0) return NETWORK;
   return { routes, stops: stops.length ? stops : NETWORK.stops };
 }
 
