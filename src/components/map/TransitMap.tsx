@@ -56,7 +56,7 @@ export function TransitMap({
   withActions = false,
 }: TransitMapProps) {
   const { data: net } = useNetwork();
-  const { data: vehicles = [] } = useVehicles();
+  const { vehicles = [] } = useVehicles();
   const { mapLayers, timeOffset } = useUI();
 
   // Time-travel: shift vehicles backwards along their route paths
