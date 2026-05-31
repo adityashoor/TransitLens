@@ -545,6 +545,62 @@ async function streamCKAN(url: string, limit = 100): Promise<Record<string, stri
   return records;
 }
 
+// ── Shared bus delay data cache ───────────────────────────────────────────────
+// The bus delay JSON is 18 MB. Without caching, every hook that needs delay data
+// (fetchRouteStats, fetchRouteCompare, fetchSafety, fetchBudget, fetchIncidents,
+//  fetchHourly, fetchHeatmap) would each download and stream it independently.
+// This module-level cache ensures only ONE download per 5-minute window.
+
+interface DelayCache { rows: Record<string, string>[]; ts: number; inflightPromise?: Promise<Record<string, string>[]> }
+const busDelayCache: DelayCache = { rows: [], ts: 0 };
+const subDelayCache: DelayCache = { rows: [], ts: 0 };
+const DELAY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getBusDelayData(limit = 5000): Promise<Record<string, string>[]> {
+  const now = Date.now();
+  // Return cache if fresh and large enough
+  if (busDelayCache.rows.length >= limit && now - busDelayCache.ts < DELAY_CACHE_TTL) {
+    return busDelayCache.rows.slice(0, limit);
+  }
+  // Deduplicate concurrent calls: if already downloading, wait for that promise
+  if (busDelayCache.inflightPromise) {
+    const rows = await busDelayCache.inflightPromise;
+    return rows.slice(0, limit);
+  }
+  // Start fresh download of max(limit, 5000) so all hooks can reuse
+  const fetchLimit = Math.max(limit, 5000);
+  busDelayCache.inflightPromise = streamCKAN(BUS_JSON_URL, fetchLimit);
+  try {
+    const rows = await busDelayCache.inflightPromise;
+    busDelayCache.rows = rows;
+    busDelayCache.ts   = Date.now();
+    return rows.slice(0, limit);
+  } finally {
+    busDelayCache.inflightPromise = undefined;
+  }
+}
+
+async function getSubDelayData(limit = 200): Promise<Record<string, string>[]> {
+  const now = Date.now();
+  if (subDelayCache.rows.length >= limit && now - subDelayCache.ts < DELAY_CACHE_TTL) {
+    return subDelayCache.rows.slice(0, limit);
+  }
+  if (subDelayCache.inflightPromise) {
+    const rows = await subDelayCache.inflightPromise;
+    return rows.slice(0, limit);
+  }
+  const fetchLimit = Math.max(limit, 200);
+  subDelayCache.inflightPromise = streamCKAN(SUB_JSON_URL, fetchLimit);
+  try {
+    const rows = await subDelayCache.inflightPromise;
+    subDelayCache.rows = rows;
+    subDelayCache.ts   = Date.now();
+    return rows.slice(0, limit);
+  } finally {
+    subDelayCache.inflightPromise = undefined;
+  }
+}
+
 // Real TTC annual totals (millions) from published operating statistics
 // Distributed across months using TTC seasonal ridership pattern
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -562,9 +618,10 @@ async function fetchYearly() {
 }
 
 /** Route comparison: on-time rates from real CKAN bus delay data + Supabase route names */
-async function fetchRouteCompare() {
+// ── Pure compute functions (receive pre-fetched data, no download) ─────────────
+
+async function computeRouteCompare(delayData: Record<string,string>[]) {
   try {
-    const delayData = await streamCKAN(BUS_JSON_URL, 500);
 
     // Aggregate on-time rate and average delay per route
     const stats: Record<string, { total: number; onTime: number; totalDelay: number }> = {};
@@ -603,12 +660,52 @@ async function fetchRouteCompare() {
   }
 }
 
-/** Real TTC incidents — streamed from CKAN (aborts after 80 records, ~1s) */
+async function fetchRouteCompare() {
+  return computeRouteCompare(await getBusDelayData(500));
+}
+
+function computeIncidents(busData: Record<string,string>[], subwayData: Record<string,string>[]) {
+  try {
+    const busIncidents = busData.map((r) => {
+      const delay = parseInt(r["Min Delay"] ?? "0");
+      return {
+        id: `bus-${r._id}`,
+        routeId: String(r.Line ?? "").split(" ")[0].trim() || "—",
+        type: "bus" as const,
+        severity: delay >= 20 ? "high" : delay >= 8 ? "medium" : "low",
+        message: `Route ${r.Line} — ${r.Code ?? "delay"} at ${r.Station ?? "unknown"} (${delay} min)`,
+        timestamp: String(r.Date ?? "").slice(0, 10),
+        minDelay: delay,
+      };
+    });
+    const subwayIncidents = subwayData.map((r) => {
+      const delay = parseInt(r["Min Delay"] ?? "0");
+      const lineCode = String(r.Line ?? "").trim();
+      return {
+        id: `sub-${r._id}`,
+        routeId: SUBWAY_LINE_MAP[lineCode] ?? lineCode,
+        type: "subway" as const,
+        severity: delay >= 15 ? "high" : delay >= 5 ? "medium" : "low",
+        message: `Line ${lineCode} — ${r.Code ?? "delay"} at ${r.Station ?? "unknown"} (${delay} min)`,
+        timestamp: String(r.Date ?? "").slice(0, 10),
+        minDelay: delay,
+      };
+    });
+    const combined = [...busIncidents, ...subwayIncidents]
+      .filter(i => i.minDelay >= 0)
+      .sort((a, b) => b.minDelay - a.minDelay)
+      .slice(0, 60);
+    return combined.length >= 5 ? combined : incidents();
+  } catch {
+    return incidents();
+  }
+}
+
 async function fetchIncidents() {
   try {
     const [busData, subwayData] = await Promise.all([
-      streamCKAN(BUS_JSON_URL, 80),
-      streamCKAN(SUB_JSON_URL, 60),
+      getBusDelayData(80),
+      getSubDelayData(60),
     ]);
 
     const busIncidents = busData.map((r) => {
@@ -662,7 +759,7 @@ async function fetchBudget() {
     const [routeResp, equityResp, delayResp] = await Promise.all([
       supabase.from("tl_routes").select("route_id, route_short_name, route_long_name, route_type").limit(150),
       supabase.from("tl_equity").select("equity_score").limit(50),
-      streamCKAN(BUS_JSON_URL, 500),
+      getBusDelayData(500),
     ]);
 
     const rawRoutes = routeResp.data;
@@ -881,8 +978,8 @@ async function fetchSafety() {
   try {
     // 1. TTC bus + subway delay data — filter for safety-relevant incident codes
     const [busData, subwayData] = await Promise.all([
-      streamCKAN(BUS_JSON_URL, 400),
-      streamCKAN(SUB_JSON_URL, 200),
+      getBusDelayData(400),
+      getSubDelayData(200),
     ]);
 
     const busEvents = busData
@@ -968,7 +1065,7 @@ async function fetchRouteStats(): Promise<Record<string, RouteStats>> {
   try {
     // Fetch bus delay data + GTFS-RT vehicle positions in parallel
     const [delayRes, vehicleRes] = await Promise.allSettled([
-      streamCKAN(BUS_JSON_URL, 800),
+      getBusDelayData(5000), // larger sample → better per-route coverage
       fetch("/api/gtfsrt/vehicles?debug", {
         signal: AbortSignal.timeout(6000),
       }).then((r) => r.text()),
@@ -1006,19 +1103,25 @@ async function fetchRouteStats(): Promise<Record<string, RouteStats>> {
 
     // ── Build final stats map ─────────────────────────────────────────────────
     const result: Record<string, RouteStats> = {};
+    const MIN_RECORDS = 15; // require ≥15 records for statistically reliable on-time %
     for (const [routeId, s] of Object.entries(agg)) {
       if (s.total < 2) continue;
-      const onTimePct = Math.round((s.onTime / s.total) * 100);
-      const avgDelayMin = Math.round((s.totalDelay / s.total) * 10) / 10;
-      const congestionIdx = Math.min(100, Math.round(avgDelayMin * 5));
-      const topIncident = Object.entries(s.incidents).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "—";
-      const status: RouteStats["status"] =
-        onTimePct < 65 ? "disrupted" : onTimePct < 80 ? "delayed" : "normal";
+      const onTimePct    = Math.round((s.onTime / s.total) * 100);
+      const avgDelayMin  = Math.round((s.totalDelay / s.total) * 10) / 10;
+      const congestionIdx= Math.min(100, Math.round(avgDelayMin * 5));
+      const topIncident  = Object.entries(s.incidents).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "—";
+      // Only mark as disrupted/delayed when we have enough data to be confident
+      const hasEnough    = s.total >= MIN_RECORDS;
+      const status: RouteStats["status"] = !hasEnough
+        ? "normal" // insufficient data — don't falsely flag
+        : onTimePct < 65 ? "disrupted"
+        : onTimePct < 80 ? "delayed"
+        : "normal";
       result[routeId] = {
-        onTimePct,
+        onTimePct:    hasEnough ? onTimePct : -1, // -1 = insufficient data
         avgDelayMin,
         incidentCount: s.total,
-        congestionIdx,
+        congestionIdx: hasEnough ? congestionIdx : 0,
         status,
         topIncident,
         liveVehicles: vehiclesByRoute[routeId] ?? 0,
@@ -1028,6 +1131,55 @@ async function fetchRouteStats(): Promise<Record<string, RouteStats>> {
   } catch {
     return {};
   }
+}
+
+async function computeRouteStats(rows: Record<string,string>[]): Promise<Record<string, RouteStats>> {
+  // Get live vehicle counts from GTFS-RT (separate, fast request)
+  const vehiclesByRoute: Record<string, number> = {};
+  try {
+    const vRes = await fetch("/api/gtfsrt/vehicles?debug", { signal: AbortSignal.timeout(5000) });
+    const vText = await vRes.text();
+    for (const m of vText.matchAll(/route_id:\s*"([^"]+)"/g)) {
+      const rid = m[1].trim();
+      vehiclesByRoute[rid] = (vehiclesByRoute[rid] ?? 0) + 1;
+    }
+  } catch { /* GTFS-RT optional */ }
+
+  const agg: Record<string, { total: number; onTime: number; totalDelay: number; incidents: Record<string, number> }> = {};
+  for (const r of rows) {
+    const routeId = String(r.Line ?? r.Route ?? "").split(" ")[0].trim();
+    if (!routeId || isNaN(Number(routeId))) continue;
+    if (!agg[routeId]) agg[routeId] = { total: 0, onTime: 0, totalDelay: 0, incidents: {} };
+    const delay = parseInt(r["Min Delay"] ?? "0");
+    agg[routeId].total++;
+    if (delay <= 5) agg[routeId].onTime++;
+    agg[routeId].totalDelay += delay;
+    const code = (r.Incident ?? r.Code ?? "Unknown").trim();
+    agg[routeId].incidents[code] = (agg[routeId].incidents[code] ?? 0) + 1;
+  }
+
+  const result: Record<string, RouteStats> = {};
+  const MIN_RECORDS = 15;
+  for (const [routeId, s] of Object.entries(agg)) {
+    if (s.total < 2) continue;
+    const onTimePct     = Math.round((s.onTime / s.total) * 100);
+    const avgDelayMin   = Math.round((s.totalDelay / s.total) * 10) / 10;
+    const congestionIdx = Math.min(100, Math.round(avgDelayMin * 5));
+    const topIncident   = Object.entries(s.incidents).sort(([,a],[,b]) => b-a)[0]?.[0] ?? "—";
+    const hasEnough     = s.total >= MIN_RECORDS;
+    const status: RouteStats["status"] = !hasEnough ? "normal"
+      : onTimePct < 65 ? "disrupted" : onTimePct < 80 ? "delayed" : "normal";
+    result[routeId] = {
+      onTimePct:     hasEnough ? onTimePct : -1,
+      avgDelayMin,
+      incidentCount: s.total,
+      congestionIdx: hasEnough ? congestionIdx : 0,
+      status,
+      topIncident,
+      liveVehicles:  vehiclesByRoute[routeId] ?? 0,
+    };
+  }
+  return result;
 }
 
 // ── Daily ridership: CKAN datastore_search incident count per day → scaled ────
@@ -1094,7 +1246,7 @@ async function fetchHourlyReal() {
 
     // CKAN delay data Time field aggregation — real hourly demand signal
     // Fetch larger sample (600 records) to get a good hourly distribution
-    const records = await streamCKAN(BUS_JSON_URL, 600);
+    const records = await getBusDelayData(600);
     if (records.length < 50) return hourlyRidership();
 
     const hourCounts = new Array(24).fill(0);
@@ -1301,7 +1453,7 @@ async function fetchNotifications(): Promise<NotificationItem[]> {
 
   // ── 2. CKAN delay data → recent high-severity incidents ─────────────────────
   try {
-    const rows = await streamCKAN(BUS_JSON_URL, 100);
+    const rows = await getBusDelayData(100);
     const highDelay = rows.filter(r => parseInt(r["Min Delay"] ?? "0") >= 20);
     const recentCollisions = rows.filter(r =>
       ["Collision - TTC","Collision - Municipal","Emergency Services"].includes(r.Code ?? "")
@@ -1430,6 +1582,10 @@ export const mockApi = {
   weather:      fetchWeather,
   budget:       fetchBudget,
   routeStats:   fetchRouteStats,
+  // Data-accepting variants — receive pre-fetched delay rows, skip download
+  routeCompareFromData: (busRows: Record<string,string>[]) => computeRouteCompare(busRows),
+  routeStatsFromData:   (busRows: Record<string,string>[]) => computeRouteStats(busRows),
+  incidentsFromData:    (busRows: Record<string,string>[], subRows: Record<string,string>[]) => computeIncidents(busRows, subRows),
   bunching:     async () => (await wait(100), bunching()),
 };
 
@@ -1440,18 +1596,44 @@ export const mockApi = {
 //   External APIs    → refetchInterval only (no Realtime push available)
 //   Daily/static     → long staleTime, refetchOnWindowFocus only
 //
-const LIVE   = { refetchInterval: 30_000,  refetchOnWindowFocus: true } as const; // KPIs, vehicles
-const FAST   = { refetchInterval: 20_000,  refetchOnWindowFocus: true } as const; // disruptions
-const STD    = { refetchInterval: 60_000,  refetchOnWindowFocus: true } as const; // hourly charts
-const SLOW   = { refetchInterval: 300_000, refetchOnWindowFocus: true } as const; // weather, incidents
-const STATIC = { staleTime: 3_600_000,     refetchOnWindowFocus: true } as const; // routes, equity, yearly
+const LIVE   = { refetchInterval: 30_000,  refetchOnWindowFocus: true } as const;
+const FAST   = { refetchInterval: 20_000,  refetchOnWindowFocus: true } as const;
+const STD    = { refetchInterval: 60_000,  refetchOnWindowFocus: true } as const;
+const SLOW   = { refetchInterval: 300_000, refetchOnWindowFocus: true } as const;
+const STATIC = { staleTime: 3_600_000,     refetchOnWindowFocus: true } as const;
+
+// ── Shared raw delay data hook — ONE download, shared by all hooks ────────────
+// All hooks that need bus/subway delay data read from this single TanStack Query
+// entry. Because the queryKey is identical, TanStack Query deduplicates the fetch
+// and caches the result for the staleTime window.
+const DELAY_RAW_CONFIG = { staleTime: 5 * 60_000, refetchInterval: 5 * 60_000, refetchOnWindowFocus: false } as const;
+
+export const useBusDelayRaw = () => useQuery({
+  queryKey: ["busDelayRaw"],
+  queryFn:  () => streamCKAN(BUS_JSON_URL, 5000),
+  ...DELAY_RAW_CONFIG,
+});
+
+export const useSubDelayRaw = () => useQuery({
+  queryKey: ["subDelayRaw"],
+  queryFn:  () => streamCKAN(SUB_JSON_URL, 300),
+  ...DELAY_RAW_CONFIG,
+});
 
 export const useKpis         = () => useQuery({ queryKey: ["kpis"],         queryFn: mockApi.kpis,         ...LIVE   });
 export const useNetwork      = () => useQuery({ queryKey: ["network"],      queryFn: mockApi.network,      ...STATIC });
 export const useHourly       = () => useQuery({ queryKey: ["hourly"],       queryFn: mockApi.hourly,       ...STD    });
 export const useDaily        = () => useQuery({ queryKey: ["daily"],        queryFn: mockApi.daily,        ...STD    });
 export const useYearly       = () => useQuery({ queryKey: ["yearly"],       queryFn: mockApi.yearly,       ...STATIC });
-export const useRouteCompare = () => useQuery({ queryKey: ["routeCompare"], queryFn: mockApi.routeCompare, ...STD    });
+export const useRouteCompare = () => {
+  const { data: busRows } = useBusDelayRaw();
+  return useQuery({
+    queryKey: ["routeCompare", (busRows?.length ?? 0) > 0],
+    queryFn:  () => busRows?.length ? mockApi.routeCompareFromData(busRows) : mockApi.routeCompare(),
+    enabled:  true,
+    ...STD,
+  });
+};
 export const useHeatmap      = () => useQuery({ queryKey: ["heatmap"],      queryFn: mockApi.heatmap,      ...SLOW   });
 export const useDisruptions  = () => useQuery({ queryKey: ["disruptions"],  queryFn: mockApi.disruptions,  ...FAST   });
 export const useNotifications= () => useQuery({ queryKey: ["notifications"],queryFn: mockApi.notifications, refetchInterval: 120_000, refetchOnWindowFocus: true });
@@ -1460,11 +1642,26 @@ export const useAiCards      = () => useQuery({ queryKey: ["aiCards"],      quer
 export const useHoods        = () => useQuery({ queryKey: ["hoods"],        queryFn: mockApi.hoods,        ...STATIC });
 // useVehicles — polls Supabase every 15s (see useRealtimeVehicles)
 export { useRealtimeVehicles as useVehicles } from "@/hooks/useRealtimeVehicles";
-export const useIncidents    = () => useQuery({ queryKey: ["incidents"],    queryFn: mockApi.incidents,    ...SLOW   }); // Toronto Open Data — daily feed
+export const useIncidents = () => {
+  const { data: busRows } = useBusDelayRaw();
+  const { data: subRows } = useSubDelayRaw();
+  return useQuery({
+    queryKey: ["incidents", (busRows?.length ?? 0) > 0, (subRows?.length ?? 0) > 0],
+    queryFn:  () => mockApi.incidentsFromData(busRows ?? [], subRows ?? []),
+    ...SLOW,
+  });
+};
 export const useFleet        = () => useQuery({ queryKey: ["fleet"],        queryFn: mockApi.fleet,        ...STD    });
 export const useOdPairs      = () => useQuery({ queryKey: ["odPairs"],      queryFn: mockApi.odPairs,      ...SLOW   });
 export const useSafety       = () => useQuery({ queryKey: ["safety"],       queryFn: mockApi.safety,       ...SLOW   });
-export const useRouteStats   = () => useQuery({ queryKey: ["routeStats"],   queryFn: mockApi.routeStats,   ...STD    }); // CKAN delay + GTFS-RT live
+export const useRouteStats = () => {
+  const { data: busRows } = useBusDelayRaw();
+  return useQuery({
+    queryKey: ["routeStats", (busRows?.length ?? 0) > 0],
+    queryFn:  () => mockApi.routeStatsFromData(busRows ?? []),
+    ...STD,
+  });
+};
 export const useWeather      = () => useQuery({ queryKey: ["weather"],      queryFn: mockApi.weather,      ...SLOW   }); // Open-Meteo — 15min updates
 export const useBudget       = () => useQuery({ queryKey: ["budget"],       queryFn: mockApi.budget,       ...STATIC });
 export const useBunching     = () => useQuery({ queryKey: ["bunching"],     queryFn: mockApi.bunching,     ...STD    });

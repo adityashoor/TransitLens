@@ -117,27 +117,81 @@ function Predictions() {
     };
   }), [next24h]);
 
-  // ── Gemini insight ────────────────────────────────────────────────────────
+  // ── Gemini insight — rich multi-source context ───────────────────────────
   const requestInsight = async () => {
     if (!geminiAvailable || insightLoading) return;
     setInsightLoading(true);
-    const now  = new Date();
-    const day  = now.toLocaleDateString("en-CA", { weekday: "long" });
-    const highDisr = disruptions.filter((d: { severity?: string }) => d.severity === "high").length;
-    const peak6h = next6h.reduce((max, w) => Math.max(max, w.precip ?? 0), 0);
-    const atRiskStr = atRiskRoutes.slice(0,3).map(r => `Route ${r.shortName} (${r.onTime}% on-time, risk ${r.combinedRisk}/100)`).join("; ") || "none identified";
-    const prompt = `You are a TTC Toronto transit operations expert. Write exactly 3 recommendations for on-duty operators right now. Format: each recommendation starts with its number and period, then 2-3 sentences — the first states the specific action, the second explains why using the numbers below, the third gives the exact step to take. Plain text only, no markdown, no bold, no bullet points, no preamble.
 
-Live TTC data right now:
-- Time: ${day}, ${now.getHours()}:00
-- Weather: ${current?.condition ?? "unknown"}, ${temp}°C, ${precip}% precip probability, ${wind} km/h wind
-- Transit impact level: ${overallImpact}
-- Bus delay risk: ${busRisk}/100 | Streetcar delay risk: ${streetcarRisk}/100 | Subway risk: ${subwayRisk}/100
-- Active high-severity disruptions: ${highDisr}
-- Forecast peak precipitation next 6 hours: ${peak6h}%
-- At-risk surface routes (low on-time + weather exposure): ${atRiskStr}
+    const now      = new Date();
+    const day      = now.toLocaleDateString("en-CA", { weekday: "long" });
+    const hourStr  = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+    const peak6h   = next6h.reduce((max, w) => Math.max(max, w.precip ?? 0), 0);
+    const peak6hHour = next6h.findIndex(w => (w.precip ?? 0) === peak6h);
+
+    // ── Disruption detail ─────────────────────────────────────────────────
+    const allDisr = disruptions as { severity?: string; routeId?: string; message?: string; type?: string }[];
+    const highDisr    = allDisr.filter(d => d.severity === "high");
+    const medDisr     = allDisr.filter(d => d.severity === "medium");
+    const subwayDisr  = allDisr.filter(d => d.type === "subway");
+    const busDisr     = allDisr.filter(d => d.type === "bus");
+    const disrDetail  = highDisr.slice(0,3).map(d =>
+      `Route ${d.routeId ?? "?"}: ${(d.message ?? "").slice(0,80)}`
+    ).join(" | ") || "none";
+
+    // ── At-risk routes with real CKAN stats ───────────────────────────────
+    const atRiskDetail = atRiskRoutes.slice(0,5).map(r =>
+      `Route ${r.shortName} ${r.longName} (${r.onTime}% on-time, risk ${r.combinedRisk}/100, ${r.mode})`
+    ).join("\n  ") || "none identified";
+
+    // ── Weather 6h forecast ───────────────────────────────────────────────
+    const weather6h = next6h.map((w, i) => {
+      const h = (now.getHours() + i) % 24;
+      return `${String(h).padStart(2,"0")}:00 ${w.condition} ${w.temp}°C ${w.precip}%rain`;
+    }).join(" | ");
+
+    // ── Network snapshot ──────────────────────────────────────────────────
+    const routeCount  = net?.routes.length ?? 0;
+    const subwayCount = net?.routes.filter(r => r.mode === "subway").length ?? 0;
+    const streetcarCount = net?.routes.filter(r => r.mode === "streetcar").length ?? 0;
+    const busCount    = net?.routes.filter(r => r.mode === "bus").length ?? 0;
+
+    // ── Route stats from CKAN delay data ──────────────────────────────────
+    const worstOnTime = atRiskRoutes.slice(0,3);
+    const statsDetail = worstOnTime.length > 0
+      ? worstOnTime.map(r => `Route ${r.shortName}: ${r.onTime}% on-time (${r.mode})`).join(", ")
+      : "all routes within normal range";
+
+    const prompt = `You are a senior TTC Toronto transit operations supervisor. Write exactly 3 numbered recommendations for operators on duty right now. Each recommendation must be 3-4 sentences: sentence 1 = specific action with route numbers or times, sentence 2 = explains why using the exact numbers provided, sentence 3 = precise operational step to take immediately, sentence 4 (optional) = expected outcome. Plain text only. No markdown. No bold. No preamble.
+
+=== LIVE TTC OPERATIONAL DATA — ${day} ${hourStr} ===
+
+WEATHER (Open-Meteo live):
+- Current: ${current?.condition ?? "unknown"}, ${temp}°C, ${precip}% precip, ${wind} km/h wind
+- Next 6 hours: ${weather6h}
+- Peak precipitation: ${peak6h}% at +${peak6hHour}h (${String((now.getHours() + peak6hHour) % 24).padStart(2,"0")}:00)
+
+DELAY RISK (weather-derived):
+- Bus routes: ${busRisk}/100 | Streetcar routes: ${streetcarRisk}/100 | Subway: ${subwayRisk}/100
+- Overall transit impact: ${overallImpact.toUpperCase()}
+
+DISRUPTIONS (live GTFS-RT + Umo feed):
+- High severity: ${highDisr.length} | Medium: ${medDisr.length}
+- Subway disruptions: ${subwayDisr.length} | Bus disruptions: ${busDisr.length}
+- High severity detail: ${disrDetail}
+
+AT-RISK SURFACE ROUTES (CKAN 2025 delay data × weather):
+  ${atRiskDetail}
+
+CKAN DELAY STATISTICS (2025 year-to-date):
+- Worst performing routes: ${statsDetail}
+- Total at-risk routes above threshold: ${atRiskRoutes.length}
+
+NETWORK SNAPSHOT (Supabase GTFS):
+- ${routeCount} total routes: ${subwayCount} subway, ${streetcarCount} streetcar, ${busCount} bus
 
 Write 3 numbered recommendations now:`;
+
+
 
     const result = await geminiAsk(prompt);
     setGeminiInsight(result);

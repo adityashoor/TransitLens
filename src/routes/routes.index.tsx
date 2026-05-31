@@ -143,15 +143,16 @@ function RouteExplorer() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.map((r, i) => {
-            // Prefer real CKAN stats; fall back to network estimates
-            const s = stats[r.id];
-            const onTime   = s?.onTimePct    ?? r.onTime;
-            const congestion = s?.congestionIdx ?? r.congestion;
-            const status   = s?.status       ?? r.status;
-            const liveVeh  = s?.liveVehicles ?? 0;
-            const incidents = s?.incidentCount ?? 0;
-            const avgDelay = s?.avgDelayMin  ?? 0;
-            const isReal   = !!s;
+            const s          = stats[r.id];
+            const rawOnTime  = s?.onTimePct ?? -1;
+            const hasReal    = rawOnTime >= 0 && (s?.incidentCount ?? 0) >= 15;
+            const onTime     = hasReal ? rawOnTime : r.onTime;
+            const congestion = hasReal ? (s?.congestionIdx ?? r.congestion) : r.congestion;
+            const status     = hasReal ? (s?.status ?? r.status) : r.status;
+            const liveVeh    = s?.liveVehicles ?? 0;
+            const incidents  = s?.incidentCount ?? 0;
+            const avgDelay   = s?.avgDelayMin  ?? 0;
+            const isReal     = hasReal;
 
             return (
               <motion.div

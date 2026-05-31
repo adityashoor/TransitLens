@@ -50,7 +50,7 @@ export async function geminiAsk(prompt: string): Promise<string | null> {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
         },
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT",        threshold: "BLOCK_NONE" },

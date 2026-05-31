@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "start": "serve dist --listen $PORT",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "refresh:gtfs": "node scripts/refresh-gtfs.mjs",
+    "refresh:shapes": "node scripts/refresh-shapes.mjs",
+    "refresh:all": "node scripts/refresh-gtfs.mjs && node scripts/refresh-shapes.mjs"
   },
   "engines": {
     "node": ">=20"

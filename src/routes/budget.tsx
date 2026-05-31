@@ -48,23 +48,15 @@ function BudgetPage() {
   const [geminiAnalysis, setGeminiAnalysis]   = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
-  if (isLoading) return <PageSkeleton />;
-  if (isError && !rows.length) return <PageError onRetry={refetch} />;
-
-  // ── Real computed KPIs ──────────────────────────────────────────────────────
-  const avgCost      = rows.reduce((s, r) => s + r.costPerRider, 0) / Math.max(1, rows.length);
-  const totalSubsidy = rows.reduce((s, r) => s + r.subsidy * r.ridership, 0);
-
-  // Real equity index from Supabase tl_equity (avg mobility score)
-  const equityIndex = hoods.length
+  // ── All hooks MUST be called before any early returns (Rules of Hooks) ──────
+  const avgCost      = useMemo(() => rows.reduce((s, r) => s + r.costPerRider, 0) / Math.max(1, rows.length), [rows]);
+  const totalSubsidy = useMemo(() => rows.reduce((s, r) => s + r.subsidy * r.ridership, 0), [rows]);
+  const equityIndex  = useMemo(() => hoods.length
     ? Math.round(hoods.reduce((s, h) => s + h.mobilityScore, 0) / hoods.length)
-    : 74;
-  const underservedCount = hoods.filter(h => h.mobilityScore < 50).length;
-
-  // FAO Ontario TTC revenue recovery (real 2022 figure)
+    : 74, [hoods]);
+  const underservedCount = useMemo(() => hoods.filter(h => h.mobilityScore < 50).length, [hoods]);
   const ttcRecovery = 35.9;
 
-  // ── Enrich rows with equity priority ───────────────────────────────────────
   const enrichedRows = useMemo(() => rows.map(r => {
     const routeStats = stats[r.id];
     const onTimePct  = routeStats?.onTimePct ?? 75;
@@ -72,7 +64,7 @@ function BudgetPage() {
     return { ...r, onTimePct, priority };
   }).sort((a, b) => b.priority - a.priority), [rows, stats]);
 
-  // ── Gemini budget analysis ──────────────────────────────────────────────────
+  // ── requestAnalysis defined before useEffect (also before early returns) ────
   const requestAnalysis = async () => {
     if (!geminiAvailable || analysisLoading || !rows.length) return;
     setAnalysisLoading(true);
@@ -82,14 +74,12 @@ function BudgetPage() {
     const prompt = `You are a Toronto transit budget policy expert. Write exactly 3 numbered policy recommendations. Each must be 2-3 sentences: first states the specific action with dollar amounts or route numbers, second explains the equity or efficiency rationale using the data, third describes the measurable outcome. Plain text only, no markdown, no bold, no intro line.
 
 Real TTC financial data:
-
-Real TTC data (FAO Ontario 2024):
 - Average cost per trip: $${avgCost.toFixed(2)} (FAO Ontario TTC benchmark: $8.01)
 - Revenue recovery rate: ${ttcRecovery}% (below peer average of 30%)
-- Total daily network subsidy: $${(totalSubsidy / 1000).toFixed(0)}K
+- Total daily network subsidy: $${(totalSubsidy / 1_000_000).toFixed(1)}M
 - Network equity index: ${equityIndex}/100 (${underservedCount} underserved neighbourhoods)
 
-High-priority equity routes (low income + poor reliability):
+High-priority equity routes:
 ${top3Priority.map(r => `- Route ${r.name} ${r.longName}: cost $${r.costPerRider}/rider, equity income area $${(r.equityIncome/1000).toFixed(0)}K, on-time ${r.onTimePct}%, priority score ${r.priority}`).join("\n")}
 
 High cost routes: ${highCost || "none"}
@@ -98,16 +88,21 @@ Low-income service areas: ${lowIncome || "none"}
 Peer comparison: TTC $8.01/trip vs Ottawa $8.40, York Region $7.40, Mississauga $7.10
 
 Write 3 numbered policy recommendations now:`;
-
     const result = await geminiAsk(prompt);
     setGeminiAnalysis(result);
     setAnalysisLoading(false);
   };
 
+  // useEffect must also be before early returns
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- requestAnalysis intentionally excluded
   useEffect(() => {
     if (geminiAvailable && rows.length > 0) requestAnalysis();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.length]);
+
+  // Early returns AFTER all hooks
+  if (isLoading) return <PageSkeleton />;
+  if (isError && !rows.length) return <PageError onRetry={refetch} />;
 
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">

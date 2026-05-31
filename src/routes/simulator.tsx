@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, RotateCcw, Zap, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { Play, Pause, RotateCcw, AlertTriangle, CheckCircle, Info, Sparkles, Loader2 } from "lucide-react";
 import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
 import { MapBox } from "@/components/map/MapBox";
 import { useNetwork, useRouteStats } from "@/mock/api";
 import { Slider } from "@/components/ui/slider";
 import { fmtCompact } from "@/lib/format";
+import { geminiAsk, geminiAvailable } from "@/lib/gemini";
+import { parseRecommendations } from "@/lib/parseGemini";
 
 export const Route = createFileRoute("/simulator")({
   head: () => ({
@@ -18,31 +20,79 @@ export const Route = createFileRoute("/simulator")({
   component: Simulator,
 });
 
-// Simulation log events — parameterised by route + impact values
-function buildLog(
-  shortName: string,
-  longName: string,
-  affectedRiders: number,
-  congestionDelta: number,
-  altCount: number,
-) {
-  return [
-    { t:  0, msg: `Route ${shortName} (${longName}) disrupted. Service suspended.`,                    sev: "high"   },
-    { t:  2, msg: "OCC alerted. Headway adjustment protocol initiated.",                                sev: "medium" },
-    { t:  5, msg: `${fmtCompact(affectedRiders)} riders affected. Diversion messaging sent to PRESTO.`, sev: "high"   },
-    { t: 10, msg: `${altCount} parallel route${altCount !== 1 ? "s" : ""} absorbing overflow passengers.`, sev: "medium" },
-    { t: 15, msg: `Congestion index rising +${congestionDelta} pts in surrounding 2 km corridor.`,     sev: "high"   },
-    { t: 20, msg: "Express short-turn service deployed on adjacent corridor.",                          sev: "medium" },
-    { t: 25, msg: "Crowding alerts issued at 3 connecting subway stations.",                            sev: "medium" },
-    { t: 30, msg: "Headway normalising. Incident response closing.",                                    sev: "low"    },
-  ];
-}
+interface LogEntry { t: number; msg: string; sev: "high" | "medium" | "low"; source: "parametric" | "gemini" }
 
 const SEV_ICON = {
   high:   <AlertTriangle className="size-3.5 text-destructive shrink-0" />,
-  medium: <Zap           className="size-3.5 text-warn shrink-0" />,
+  medium: <Sparkles      className="size-3.5 text-warn shrink-0" />,
   low:    <CheckCircle   className="size-3.5 text-cyan shrink-0" />,
 };
+
+/**
+ * Build a fully parametric simulation log from real route data.
+ * Every message references actual numbers — no generic placeholders.
+ */
+function buildLog(
+  route: { shortName: string; longName: string; mode: string; ridership: number; headway: number },
+  delay: number,
+  affectedRiders: number,
+  congestionDelta: number,
+  altRoutes: { shortName: string; longName: string }[],
+  realOnTime: number,
+  realIncidents: number,
+): LogEntry[] {
+  const isSubway   = route.mode === "subway";
+  const isSevere   = delay >= 30;
+  const altStr     = altRoutes.slice(0, 2).map(r => `Route ${r.shortName} ${r.longName.slice(0,18)}`).join(" and ") || "adjacent routes";
+  const connectStr = isSubway ? "connecting bus and streetcar stops" : "downstream intersections";
+  const headwayNew = Math.min(route.headway + Math.round(delay * 0.4), 20);
+  const peakRiders = Math.round(affectedRiders * 0.6);
+
+  const entries: LogEntry[] = [
+    {
+      t: 0,
+      msg: `${isSubway ? "Line" : "Route"} ${route.shortName} (${route.longName}) — ${delay}-minute service suspension initiated. ${fmtCompact(route.ridership)} daily riders impacted on this corridor.`,
+      sev: "high", source: "parametric",
+    },
+    {
+      t: 2,
+      msg: `OCC alerted. Headway adjustment protocol activated. Target headway adjusted from ${route.headway} min to ${headwayNew} min to compensate for gap.`,
+      sev: "medium", source: "parametric",
+    },
+    {
+      t: 5,
+      msg: `PRESTO push notification sent to ${fmtCompact(affectedRiders)} affected tap-in riders. ${fmtCompact(peakRiders)} currently in peak travel window. Diversion to ${altStr} recommended.`,
+      sev: "high", source: "parametric",
+    },
+    {
+      t: 10,
+      msg: `${altRoutes.length > 0 ? `${altStr} absorbing overflow.` : "No direct parallel routes."} ${isSubway ? "Surface shuttle bus deployment authorised for gap section." : "Short-turn service activated at next major intersection."} Crowding building at ${connectStr}.`,
+      sev: "medium", source: "parametric",
+    },
+    {
+      t: 15,
+      msg: `Congestion index +${congestionDelta} pts in surrounding 2 km corridor. ${isSevere ? `Extended delay — ${realOnTime}% baseline on-time rate means recovery will take longer (${realIncidents} incidents on record this year).` : `Manageable impact given ${realOnTime}% historical on-time rate.`}`,
+      sev: isSevere ? "high" : "medium", source: "parametric",
+    },
+    {
+      t: 20,
+      msg: `${isSubway ? `Additional capacity deployed on ${altStr}. Supervisors positioned at key interchange stations.` : `Express short-turn service on ${altStr} reducing passenger wait by ~${Math.round(delay * 0.5)} min.`} Customer service agents deployed at ${isSubway ? "affected subway stations" : "major stops"}.`,
+      sev: "medium", source: "parametric",
+    },
+    {
+      t: 25,
+      msg: `Crowding alerts at ${isSubway ? "Union, Bloor-Yonge and Sheppard interchange" : "3 connecting stops"} now at yellow threshold. ${isSevere ? "Recovery estimate: 15-20 min after service restored." : "System absorbing disruption within normal parameters."}`,
+      sev: isSevere ? "high" : "medium", source: "parametric",
+    },
+    {
+      t: 30,
+      msg: `Headway normalising. Incident response closing. Post-incident report queued for ${route.shortName} service reliability review. Affected: ${fmtCompact(affectedRiders)} riders, ${delay} min delay, +${congestionDelta} pts congestion.`,
+      sev: "low", source: "parametric",
+    },
+  ];
+
+  return entries;
+}
 
 function Simulator() {
   const { data: net } = useNetwork();
@@ -52,49 +102,89 @@ function Simulator() {
   const [delay,   setDelay]     = useState(15);
   const [time,    setTime]      = useState(0);
   const [playing, setPlaying]   = useState(false);
+  const [geminiLog, setGeminiLog] = useState<LogEntry[]>([]);
+  const [geminiLoading, setGeminiLoading] = useState(false);
 
   const disabledIds = useMemo(() => new Set(routeId ? [routeId] : []), [routeId]);
   const route = net?.routes.find((r) => r.id === routeId);
 
-  // Find parallel routes (same mode, different id) for alt-route count
+  // Alt routes: parallel routes of same mode
   const altRoutes = useMemo(() => {
     if (!route || !net) return [];
-    return net.routes
-      .filter((r) => r.id !== route.id && r.mode === route.mode)
-      .slice(0, 3);
+    return net.routes.filter(r => r.id !== route.id && r.mode === route.mode).slice(0, 3);
   }, [route, net]);
 
-  // Impact model: use real ridership from route + real on-time from CKAN stats
-  const realOnTime    = stats[routeId]?.onTimePct   ?? route?.onTime    ?? 80;
+  // Real data from CKAN stats
+  const realOnTime   = stats[routeId]?.onTimePct    ?? route?.onTime    ?? 75;
   const realRidership = route?.ridership             ?? 0;
+  const realIncidents = stats[routeId]?.incidentCount ?? 0;
 
-  // How many riders are affected depends on delay severity and route frequency
-  const affectedRiders = route
-    ? Math.round(realRidership * (0.35 + (delay / 60) * 0.30))
-    : 0;
+  // Impact model using real data
+  const affectedRiders  = route ? Math.round(realRidership * (0.35 + (delay / 60) * 0.30)) : 0;
+  const congestionDelta = route ? Math.round((delay * 0.55) + ((100 - realOnTime) * 0.25) + 6) : 0;
+  const avgAddedTime    = route ? Math.round(delay * 0.65 + 4) : 0;
 
-  // Congestion increase: worse for already-delayed routes
-  const congestionDelta = route
-    ? Math.round((delay * 0.55) + ((100 - realOnTime) * 0.25) + 6)
-    : 0;
+  // Build parametric log from real data
+  const parametricLog = useMemo(() => {
+    if (!route) return [];
+    return buildLog(route, delay, affectedRiders, congestionDelta, altRoutes, realOnTime, realIncidents);
+  }, [route, delay, affectedRiders, congestionDelta, altRoutes, realOnTime, realIncidents]);
 
-  // Avg added travel time for displaced riders (minutes)
-  const avgAddedTime = route ? Math.round(delay * 0.65 + 4) : 0;
+  // Merge parametric + Gemini entries, sorted by time
+  const fullLog = useMemo(() => {
+    const merged = [...parametricLog, ...geminiLog].sort((a, b) => a.t - b.t);
+    return merged;
+  }, [parametricLog, geminiLog]);
 
-  const logEvents = useMemo(
-    () => route
-      ? buildLog(route.shortName, route.longName, affectedRiders, congestionDelta, altRoutes.length)
-      : [],
-    [route, affectedRiders, congestionDelta, altRoutes.length],
-  );
+  const visibleLog = fullLog.filter(e => e.t <= time);
 
-  const visibleLog = logEvents.filter((e) => e.t <= time);
+  // Gemini: generate 2 extra log entries with deeper operational insight
+  const fetchGeminiLog = useCallback(async () => {
+    if (!geminiAvailable || !route || geminiLoading) return;
+    setGeminiLoading(true);
+    const prompt = `TTC Toronto transit simulation. Write exactly 2 OCC log entries for a ${delay}-minute disruption on ${route.mode} Route ${route.shortName} (${route.longName}). Each entry is one sentence, max 25 words. Reference specific numbers. Format: time offset in minutes then a pipe then the log message. Use realistic TTC operations language. No intro. No markdown.
 
-  // Timer: advances 1 sim-minute every 400ms when playing
+Route data: ${realRidership.toLocaleString()} daily riders, ${realOnTime}% on-time, ${realIncidents} incidents this year, ${route.headway}min headway, ${altRoutes.length} parallel routes available.
+Disruption: ${delay} min delay, ${fmtCompact(affectedRiders)} affected riders, +${congestionDelta} pts congestion.
+
+Example format:
+7 | 847 passengers transferred to Route 35 Jane northbound at Eglinton.
+22 | Signal restored at Yonge/Bloor junction; 4-minute recovery window initiated.
+
+Write 2 entries now:`;
+    const result = await geminiAsk(prompt);
+    if (result) {
+      const newEntries: LogEntry[] = result
+        .split("\n")
+        .map(l => l.replace(/\*\*/g,"").replace(/\*/g,"").trim())
+        .filter(l => /^\d+\s*\|/.test(l))
+        .map(l => {
+          const [tPart, ...msgParts] = l.split("|");
+          const t = parseInt(tPart.trim());
+          const msg = msgParts.join("|").trim();
+          // Avoid duplicate time slots
+          const occupied = new Set(parametricLog.map(e => e.t));
+          const safeT = occupied.has(t) ? t + 1 : t;
+          return { t: Math.max(1, Math.min(29, safeT)), msg, sev: "medium" as const, source: "gemini" as const };
+        })
+        .filter(e => e.msg.length > 15)
+        .slice(0, 2);
+      setGeminiLog(newEntries);
+    }
+    setGeminiLoading(false);
+  }, [route, delay, affectedRiders, congestionDelta, altRoutes, realOnTime, realIncidents, realRidership, parametricLog, geminiLoading]);
+
+  // Re-generate Gemini log when route or delay changes
+  useEffect(() => {
+    if (route && geminiAvailable) fetchGeminiLog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId, delay]);
+
+  // Timer
   useEffect(() => {
     if (!playing) return;
     const id = setInterval(() => {
-      setTime((prev) => {
+      setTime(prev => {
         if (prev >= 30) { setPlaying(false); return prev; }
         return prev + 1;
       });
@@ -109,15 +199,13 @@ function Simulator() {
     setPlaying(true);
   }, [route, playing, time]);
 
-  const handleReset = useCallback(() => {
-    setPlaying(false);
-    setTime(0);
-  }, []);
+  const handleReset = useCallback(() => { setPlaying(false); setTime(0); }, []);
 
   const handleRouteChange = (id: string) => {
     setRouteId(id);
     setPlaying(false);
     setTime(0);
+    setGeminiLog([]);
   };
 
   const progress = Math.round((time / 30) * 100);
@@ -126,14 +214,11 @@ function Simulator() {
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Disruption Simulator"
-        subtitle="What-if modelling for the TTC network · parametric impact from real route data"
+        subtitle="What-if modelling · parametric impact from real CKAN route data · Gemini-enhanced log"
         action={
           <div className="flex gap-2">
-            <button
-              onClick={handleRun}
-              disabled={!route}
-              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2 disabled:opacity-40"
-            >
+            <button onClick={handleRun} disabled={!route}
+              className="h-9 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2 disabled:opacity-40">
               {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
               {playing ? "Pause" : "Run simulation"}
             </button>
@@ -151,22 +236,16 @@ function Simulator() {
             <div className="space-y-5">
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Route to disrupt</label>
-                <select
-                  value={routeId}
-                  onChange={(e) => handleRouteChange(e.target.value)}
-                  className="w-full h-9 rounded-lg bg-surface border border-border text-sm px-2 outline-none focus:ring-2 focus:ring-ring/40"
-                >
+                <select value={routeId} onChange={e => handleRouteChange(e.target.value)}
+                  className="w-full h-9 rounded-lg bg-surface border border-border text-sm px-2 outline-none focus:ring-2 focus:ring-ring/40">
                   <option value="">— choose route —</option>
-                  {/* Group by mode */}
-                  {(["subway", "streetcar", "bus"] as const).map((mode) => {
-                    const modeRoutes = net?.routes.filter((r) => r.mode === mode) ?? [];
+                  {(["subway","streetcar","bus"] as const).map(mode => {
+                    const modeRoutes = net?.routes.filter(r => r.mode === mode) ?? [];
                     if (!modeRoutes.length) return null;
                     return (
                       <optgroup key={mode} label={mode.charAt(0).toUpperCase() + mode.slice(1)}>
-                        {modeRoutes.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.shortName} · {r.longName.slice(0, 28)}
-                          </option>
+                        {modeRoutes.map(r => (
+                          <option key={r.id} value={r.id}>{r.shortName} · {r.longName.slice(0,28)}</option>
                         ))}
                       </optgroup>
                     );
@@ -180,73 +259,57 @@ function Simulator() {
                 </label>
                 <Slider value={[delay]} onValueChange={([v]) => setDelay(v)} min={0} max={60} step={5} />
                 <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                  <span>0 min</span><span>30</span><span>60 min</span>
+                  <span>0</span><span>30</span><span>60 min</span>
                 </div>
               </div>
 
-              {/* Simulation progress bar */}
               <div>
                 <div className="flex justify-between mb-1">
-                  <label className="text-xs text-muted-foreground">
-                    Sim time: <b className="text-foreground">{time} min</b>
-                  </label>
+                  <label className="text-xs text-muted-foreground">Sim time: <b className="text-foreground">{time} min</b></label>
                   {playing && <span className="text-[10px] text-primary animate-pulse">Running…</span>}
                   {time >= 30 && !playing && <span className="text-[10px] text-success">Complete</span>}
                 </div>
                 <div className="h-2 rounded-full bg-surface overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-primary"
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.3 }}
-                  />
-                </div>
-                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                  <span>0</span><span>15 min</span><span>30 min</span>
+                  <motion.div className="h-full rounded-full bg-primary"
+                    animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
                 </div>
               </div>
 
               {/* Real data badge */}
-              {route && stats[routeId] && (
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-surface/40 rounded-lg px-2 py-1.5 border border-border">
-                  <Info className="size-3 text-cyan shrink-0" />
-                  Impact uses real on-time rate ({realOnTime}%) from CKAN 2025 data
+              {route && (
+                <div className="rounded-xl border border-border bg-surface/40 p-2.5 space-y-1 text-[10px] text-muted-foreground">
+                  <div className="flex justify-between"><span>Daily ridership</span><span className="font-semibold text-foreground">{fmtCompact(realRidership)}</span></div>
+                  <div className="flex justify-between"><span>On-time rate (CKAN)</span><span className={`font-semibold ${realOnTime < 75 ? "text-destructive" : "text-success"}`}>{realOnTime}%</span></div>
+                  <div className="flex justify-between"><span>Incidents (2025)</span><span className="font-semibold text-foreground">{realIncidents}</span></div>
+                  <div className="flex justify-between"><span>Headway</span><span className="font-semibold text-foreground">{route.headway} min</span></div>
                 </div>
               )}
             </div>
           </ChartCard>
 
           {/* Impact dashboard */}
-          <ChartCard title="Impact dashboard" subtitle="Live cascading effects">
+          <ChartCard title="Impact dashboard" subtitle="Computed from real ridership data">
             <div className="space-y-2">
               {[
-                { label: "Affected riders",       value: route ? fmtCompact(affectedRiders) : "0",           warn: affectedRiders > 50_000 },
-                { label: "Avg added travel time",  value: route ? `+${avgAddedTime} min` : "—",               warn: avgAddedTime > 15 },
-                { label: "Congestion increase",    value: route ? `+${congestionDelta} pts` : "+0 pts",       warn: congestionDelta > 20 },
-                { label: "Alt routes activated",   value: route ? String(altRoutes.length) : "0",             warn: false },
+                { label: "Affected riders",      value: route ? fmtCompact(affectedRiders) : "0",         warn: affectedRiders > 50_000 },
+                { label: "Avg added travel time", value: route ? `+${avgAddedTime} min` : "—",            warn: avgAddedTime > 15 },
+                { label: "Congestion increase",   value: route ? `+${congestionDelta} pts` : "+0 pts",    warn: congestionDelta > 20 },
+                { label: "Alt routes activated",  value: route ? String(altRoutes.length) : "0",          warn: false },
               ].map(({ label, value, warn }) => (
-                <motion.div
-                  key={label}
-                  layout
-                  className={`rounded-xl border p-3 flex items-center justify-between transition-colors ${
-                    warn && route ? "border-warn/30 bg-warn/5" : "border-border bg-surface/40"
-                  }`}
-                >
+                <div key={label} className={`rounded-xl border p-3 flex items-center justify-between ${warn && route ? "border-warn/30 bg-warn/5" : "border-border bg-surface/40"}`}>
                   <span className="text-xs text-muted-foreground">{label}</span>
                   <span className={`font-semibold text-sm ${warn && route ? "text-warn" : ""}`}>{value}</span>
-                </motion.div>
+                </div>
               ))}
             </div>
 
-            {/* Alt routes list */}
-            {route && altRoutes.length > 0 && (
+            {altRoutes.length > 0 && route && (
               <div className="mt-3 space-y-1">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">Parallel routes</div>
-                {altRoutes.map((r) => (
+                {altRoutes.map(r => (
                   <div key={r.id} className="flex items-center gap-2">
-                    <span
-                      className="size-5 rounded text-[9px] font-bold flex items-center justify-center text-white shrink-0"
-                      style={{ background: r.color }}
-                    >{r.shortName}</span>
+                    <span className="size-5 rounded text-[9px] font-bold flex items-center justify-center text-white shrink-0"
+                      style={{ background: r.color }}>{r.shortName}</span>
                     <span className="text-[10px] text-muted-foreground truncate">{r.longName}</span>
                   </div>
                 ))}
@@ -261,37 +324,50 @@ function Simulator() {
           subtitle={route ? `${route.shortName} · ${route.longName} — disrupted` : "Select a route to begin"}
           className="lg:col-span-9 h-[640px]"
         >
-          {/* key forces MapContainer remount on route change — resets center/zoom to Toronto */}
-          <MapBox
-            key={`sim-map-${routeId || "none"}`}
+          <MapBox key={`sim-map-${routeId || "none"}`}
             highlightRouteId={routeId || null}
             disabledRouteIds={disabledIds}
-            showVehicles
-            showBunching={false}
-            zoom={11}
-          />
+            showVehicles showBunching={false} zoom={11} />
         </ChartCard>
       </div>
 
       {/* Simulation log */}
-      <ChartCard title="Simulation log" subtitle="OCC system reactions over time" className="mt-4">
+      <ChartCard
+        title="Simulation log"
+        subtitle={route
+          ? `${route.shortName} ${route.longName} · ${delay}min delay · real ridership + CKAN on-time data${geminiAvailable ? " · Gemini-enhanced" : ""}`
+          : "OCC system reactions over time"}
+        className="mt-4"
+        action={
+          geminiAvailable && route && (
+            <button onClick={fetchGeminiLog} disabled={geminiLoading}
+              className="text-[10px] flex items-center gap-1 text-primary hover:underline disabled:opacity-40">
+              {geminiLoading ? <><Loader2 className="size-3 animate-spin" /> Generating…</> : <><Sparkles className="size-3" /> Regenerate Gemini entries</>}
+            </button>
+          )
+        }
+      >
         {!route ? (
-          <div className="text-sm text-muted-foreground py-4 text-center">Select a route and click Run simulation to see the event log.</div>
+          <div className="text-sm text-muted-foreground py-4 text-center flex items-center justify-center gap-2">
+            <Info className="size-4" /> Select a route and click Run simulation to see the log.
+          </div>
         ) : visibleLog.length === 0 ? (
           <div className="text-sm text-muted-foreground py-4 text-center">Click Run simulation to begin.</div>
         ) : (
           <ul className="space-y-2">
             <AnimatePresence>
               {visibleLog.map((e) => (
-                <motion.li
-                  key={e.t}
+                <motion.li key={`${e.t}-${e.source}`}
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="flex items-start gap-3 text-sm rounded-xl border border-border bg-surface/30 px-3 py-2.5"
+                  className={`flex items-start gap-3 text-sm rounded-xl border px-3 py-2.5 ${e.source === "gemini" ? "border-primary/20 bg-primary/5" : "border-border bg-surface/30"}`}
                 >
                   <span className="text-xs text-muted-foreground w-12 shrink-0 pt-0.5">T+{e.t}m</span>
-                  {SEV_ICON[e.sev as keyof typeof SEV_ICON]}
-                  <span>{e.msg}</span>
+                  {SEV_ICON[e.sev]}
+                  <span className="flex-1">{e.msg}</span>
+                  {e.source === "gemini" && (
+                    <span className="text-[9px] text-primary border border-primary/20 rounded px-1 py-0.5 shrink-0">AI</span>
+                  )}
                 </motion.li>
               ))}
             </AnimatePresence>
