@@ -98,12 +98,13 @@ export interface Notification {
   body: string;
   type: "info" | "warn" | "alert" | "ai";
   time: string;
+  href?: string; // in-app route to navigate to when clicked
 }
 export const notifications: Notification[] = [
-  { id: "n1", title: "AI Forecast", body: "Line 1 ridership +14% vs typical Saturday.", type: "ai", time: "2m" },
-  { id: "n2", title: "Disruption", body: "504 King held at Yonge — 8 min delay.", type: "alert", time: "6m" },
-  { id: "n3", title: "Equity Alert", body: "Mobility score dropped in Mount Dennis.", type: "warn", time: "22m" },
-  { id: "n4", title: "Network", body: "All subway lines resumed normal service.", type: "info", time: "1h" },
+  { id: "n1", title: "AI Forecast",    body: "Line 1 ridership +14% vs typical Saturday.",   type: "ai",    time: "2m",  href: "/predictions" },
+  { id: "n2", title: "Disruption",     body: "504 King held at Yonge — 8 min delay.",        type: "alert", time: "6m",  href: "/incidents"   },
+  { id: "n3", title: "Equity Alert",   body: "Mobility score dropped in Mount Dennis.",       type: "warn",  time: "22m", href: "/equity"      },
+  { id: "n4", title: "Network",        body: "All subway lines resumed normal service.",      type: "info",  time: "1h",  href: "/map"         },
 ];
 
 // AI predictions

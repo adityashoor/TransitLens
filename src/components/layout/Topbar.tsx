@@ -1,7 +1,8 @@
-import { Bell, Search, Sun, Moon, Activity } from "lucide-react";
+import { Bell, Search, Sun, Moon, Activity, ArrowRight } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { useNotifications } from "@/mock/api";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 export function Topbar() {
@@ -9,7 +10,7 @@ export function Topbar() {
   const { data: notes = [] } = useNotifications();
 
   return (
-    <header className="h-16 border-b border-border bg-background/40 backdrop-blur-xl sticky top-0 z-20 flex items-center gap-3 px-4 md:px-6">
+    <header className="h-16 border-b border-border bg-background/40 backdrop-blur-xl sticky top-0 z-[200] flex items-center gap-3 px-4 md:px-6">
       <div className="flex items-center gap-2 md:hidden">
         <div className="size-8 rounded-lg flex items-center justify-center" style={{ background: "var(--gradient-primary)" }}>
           <Activity className="size-4 text-primary-foreground" />
@@ -59,26 +60,42 @@ export function Topbar() {
               <span className="text-[10px] text-muted-foreground">{notes.length} new</span>
             </div>
             <ul className="max-h-80 overflow-y-auto scrollbar-thin">
-              {notes.map((n) => (
-                <li key={n.id} className="px-4 py-3 border-b border-border last:border-0 hover:bg-surface/40">
-                  <div className="flex items-start gap-2">
-                    <span
-                      className={cn(
-                        "mt-1.5 size-2 rounded-full shrink-0",
-                        n.type === "ai" && "bg-primary",
-                        n.type === "alert" && "bg-destructive",
-                        n.type === "warn" && "bg-warn",
-                        n.type === "info" && "bg-cyan",
-                      )}
-                    />
+              {notes.map((n) => {
+                const inner = (
+                  <div className="flex items-start gap-2 w-full">
+                    <span className={cn(
+                      "mt-1.5 size-2 rounded-full shrink-0",
+                      n.type === "ai"    && "bg-primary",
+                      n.type === "alert" && "bg-destructive",
+                      n.type === "warn"  && "bg-warn",
+                      n.type === "info"  && "bg-cyan",
+                    )} />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">{n.title}</div>
                       <div className="text-xs text-muted-foreground line-clamp-2">{n.body}</div>
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{n.time}</span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">{n.time}</span>
+                      {n.href && <ArrowRight className="size-3 text-muted-foreground group-hover:text-primary transition-colors" />}
+                    </div>
                   </div>
-                </li>
-              ))}
+                );
+
+                return (
+                  <li key={n.id} className="border-b border-border last:border-0">
+                    {n.href ? (
+                      <Link
+                        to={n.href}
+                        className="group px-4 py-3 flex hover:bg-surface/50 transition-colors"
+                      >
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div className="px-4 py-3">{inner}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </PopoverContent>
         </Popover>

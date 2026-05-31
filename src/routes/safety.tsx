@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ShieldAlert, Activity, AlertTriangle } from "lucide-react";
 import { useSafety, useNetwork } from "@/mock/api";
+import { PageSkeleton } from "@/components/ui-ext/Skeleton";
+import { PageError } from "@/components/ui-ext/QueryError";
 import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
 import { KpiCard } from "@/components/ui-ext/KpiCard";
+import { InsightStrip } from "@/components/ui-ext/InsightStrip";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip } from "recharts";
 
 export const Route = createFileRoute("/safety")({
@@ -11,8 +14,10 @@ export const Route = createFileRoute("/safety")({
 });
 
 function SafetyPage() {
-  const { data: events = [] } = useSafety();
+  const { data: events = [], isLoading, isError, refetch } = useSafety();
   const { data: net } = useNetwork();
+  if (isLoading) return <PageSkeleton />;
+  if (isError && !events.length) return <PageError onRetry={refetch} />;
   const critical = events.filter((e) => e.severity === "critical").length;
   const byType = ["near-miss","collision","pedestrian","cyclist"].map((t) => ({
     type: t, count: events.filter((e) => e.type === t).length,
@@ -21,9 +26,49 @@ function SafetyPage() {
     loc, count: events.filter((e) => e.location === loc).length,
   })).sort((a, b) => b.count - a.count);
 
+  // Derive actionable insights from live data
+  const topHotspot = byLoc[0];
+  const topRouteEvents = Object.entries(
+    events.reduce<Record<string, number>>((acc, e) => { acc[e.routeId] = (acc[e.routeId] ?? 0) + 1; return acc; }, {})
+  ).sort(([, a], [, b]) => b - a)[0];
+  const pedestrianCount = events.filter(e => e.type === "pedestrian" || e.type === "cyclist").length;
+  const recentCritical = events.filter(e => e.severity === "critical" && e.daysAgo <= 7).length;
+
+  const safetyInsights = [
+    ...(topHotspot ? [{
+      kind: "warn" as const,
+      headline: `Hotspot: ${topHotspot.loc}`,
+      detail: `${topHotspot.count} incident${topHotspot.count > 1 ? "s" : ""} recorded at this location in the last 30 days.`,
+      action: "Review signal timing and transit stop placement",
+    }] : []),
+    ...(topRouteEvents ? [{
+      kind: critical > 3 ? "critical" as const : "warn" as const,
+      headline: `Route ${topRouteEvents[0]} — highest incident count`,
+      detail: `${topRouteEvents[1]} safety event${topRouteEvents[1] > 1 ? "s" : ""} linked to this route. Consider proactive safety audit.`,
+      action: "Flag for Vision Zero corridor review",
+    }] : []),
+    {
+      kind: pedestrianCount > 5 ? "critical" as const : pedestrianCount > 2 ? "warn" as const : "success" as const,
+      headline: `${pedestrianCount} vulnerable road user event${pedestrianCount !== 1 ? "s" : ""}`,
+      detail: pedestrianCount > 5
+        ? "Elevated pedestrian/cyclist incidents. Infrastructure redesign recommended at crossings."
+        : pedestrianCount > 2
+        ? "Moderate vulnerable user exposure. Monitor crossing signal compliance."
+        : "Vulnerable road user incidents within acceptable range this period.",
+      action: pedestrianCount > 2 ? "Coordinate with City Traffic Management" : undefined,
+    },
+    ...(recentCritical > 0 ? [{
+      kind: "critical" as const,
+      headline: `${recentCritical} critical event${recentCritical > 1 ? "s" : ""} in last 7 days`,
+      detail: "Recent critical incidents require immediate operator briefing and route monitoring.",
+      action: "Escalate to TTC Operations Control Centre",
+    }] : []),
+  ].slice(0, 3);
+
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader title="Vision Zero · Safety" subtitle="Collision & near-miss density · last 30 days" />
+      <InsightStrip insights={safetyInsights} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
         <KpiCard label="Total events" value={events.length} format="raw" icon={Activity} accent="cyan" />

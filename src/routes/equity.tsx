@@ -6,7 +6,8 @@ import { HoodsMap } from "@/components/map/TransitMap";
 import { ClientOnly } from "@/components/ClientOnly";
 import { useHoods } from "@/mock/api";
 import type { Hood } from "@/mock/data";
-import { Lightbulb, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
+import { InsightStrip } from "@/components/ui-ext/InsightStrip";
 
 export const Route = createFileRoute("/equity")({
   head: () => ({
@@ -32,12 +33,46 @@ function Equity() {
   const ranked = [...hoods].sort((a, b) => a.mobilityScore - b.mobilityScore);
   const underserved = ranked.slice(0, 5);
 
+  // Derive equity insights from live neighbourhood data
+  const critical = ranked.filter(h => h.mobilityScore < 40);
+  const longWait  = ranked.filter(h => h.avgWait > 15);
+  const lowDensity = ranked.filter(h => h.stopDensity < 3);
+  const equityGap = hoods.length > 1
+    ? Math.round(ranked[ranked.length - 1].mobilityScore - ranked[0].mobilityScore)
+    : 0;
+
+  const equityInsights = [
+    ...(critical.length > 0 ? [{
+      kind: "critical" as const,
+      headline: `${critical.length} neighbourhood${critical.length > 1 ? "s" : ""} below mobility threshold`,
+      detail: `${critical.map(h => h.name).slice(0, 2).join(", ")}${critical.length > 2 ? ` +${critical.length - 2} more` : ""} score below 40/100 — classified as transit deserts.`,
+      action: "Priority candidates for new route or frequency increase",
+    }] : []),
+    ...(equityGap > 30 ? [{
+      kind: "warn" as const,
+      headline: `${equityGap}-point equity gap across the network`,
+      detail: `Mobility scores range from ${ranked[0]?.mobilityScore} to ${ranked[ranked.length - 1]?.mobilityScore}. High disparity indicates unequal service distribution.`,
+      action: "Review service allocation against income and density data",
+    }] : [{
+      kind: "success" as const,
+      headline: "Equity gap within acceptable range",
+      detail: `${equityGap}-point spread across ${hoods.length} neighbourhoods. Continue monitoring underserved areas.`,
+    }]),
+    ...(longWait.length > 0 ? [{
+      kind: "warn" as const,
+      headline: `${longWait.length} area${longWait.length > 1 ? "s" : ""} with avg wait > 15 min`,
+      detail: `${longWait.map(h => h.name).slice(0, 2).join(", ")}${longWait.length > 2 ? ` +${longWait.length - 2} more` : ""} exceed the TTC 15-minute service standard.`,
+      action: "Evaluate headway reduction or on-demand transit pilot",
+    }] : []),
+  ].slice(0, 3);
+
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Equity Heatmap"
         subtitle="Mobility access across 25 Toronto neighborhoods"
       />
+      <InsightStrip insights={equityInsights} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <ChartCard title="Mobility score by neighborhood" subtitle="Click an area for details" className="lg:col-span-2 h-[600px]">
@@ -93,11 +128,21 @@ function Equity() {
           </ChartCard>
 
           <div className="glass-card rounded-2xl p-5">
-            <div className="flex items-center gap-2 mb-2"><Lightbulb className="size-4 text-warn" /><div className="text-sm font-semibold">AI recommendations</div></div>
+            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Service recommendations</div>
             <ul className="text-xs text-muted-foreground space-y-2">
-              <li>• Add 2 bus runs on 35 Jane during evening peak to lift Mount Dennis score by ~6 pts.</li>
-              <li>• Adjust 116 Morningside headway to 8 min to improve Malvern wait time.</li>
-              <li>• Pilot demand-responsive transit in Rouge to address last-mile coverage.</li>
+              {underserved.slice(0, 3).map((h) => (
+                <li key={h.id}>
+                  • <span className="text-foreground font-medium">{h.name}</span>
+                  {h.avgWait > 15
+                    ? ` — reduce headway to meet 15-min standard (currently ${h.avgWait} min avg wait)`
+                    : h.stopDensity < 3
+                    ? ` — add stops to improve density (${h.stopDensity}/km²)`
+                    : ` — mobility score ${h.mobilityScore}/100, review service allocation`}
+                </li>
+              ))}
+              {lowDensity.length > 0 && (
+                <li>• {lowDensity.length} area{lowDensity.length > 1 ? "s" : ""} with stop density &lt;3/km² — pilot demand-responsive transit</li>
+              )}
             </ul>
           </div>
         </div>

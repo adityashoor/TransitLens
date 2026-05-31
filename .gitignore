@@ -51,3 +51,5 @@ data/bikeshare/
 data/equity/
 data/logs/
 downloads/
+.env.local
+.env.*.local

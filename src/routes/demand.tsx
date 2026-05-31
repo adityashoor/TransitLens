@@ -40,8 +40,8 @@ function DemandPage() {
               <div />
               {hubs.map((h) => <div key={h} className="text-[10px] text-muted-foreground p-2 text-center truncate">{h}</div>)}
               {hubs.map((from) => (
-                <>
-                  <div key={`r-${from}`} className="text-[10px] text-muted-foreground p-2 truncate">{from}</div>
+                <div key={`row-${from}`} className="contents">
+                  <div className="text-[10px] text-muted-foreground p-2 truncate">{from}</div>
                   {hubs.map((to) => {
                     const cell = matrix[from]?.[to];
                     if (!cell) return <div key={`${from}-${to}`} className="aspect-square m-0.5 rounded bg-surface/30" />;
@@ -55,7 +55,7 @@ function DemandPage() {
                       </div>
                     );
                   })}
-                </>
+                </div>
               ))}
             </div>
           </div>

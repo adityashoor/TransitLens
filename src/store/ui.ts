@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 export type Theme = "dark" | "light";
-export type Scenario = "baseline" | "raptors" | "snowstorm" | "strike" | "heatwave";
+export type Scenario = string; // dynamic — real events detected from GTFS-RT + weather + disruptions
 
 interface UIState {
   theme: Theme;
@@ -10,7 +10,7 @@ interface UIState {
   reducedMotion: boolean;
   highContrast: boolean;
   density: "comfortable" | "compact";
-  mapLayers: { routes: boolean; stops: boolean; vehicles: boolean; heatmap: boolean; traffic: boolean; bike: boolean };
+  mapLayers: { routes: boolean; stops: boolean; vehicles: boolean };
   timeOffset: number; // minutes, 0 = now, negative = past
   scenario: Scenario;
   commandOpen: boolean;
@@ -34,7 +34,7 @@ export const useUI = create<UIState>()(
       reducedMotion: false,
       highContrast: false,
       density: "comfortable",
-      mapLayers: { routes: true, stops: true, vehicles: true, heatmap: false, traffic: false, bike: false },
+      mapLayers: { routes: true, stops: true, vehicles: true },
       timeOffset: 0,
       scenario: "baseline",
       commandOpen: false,
@@ -65,6 +65,7 @@ export const useUI = create<UIState>()(
     }),
     {
       name: "transitlens-ui",
+      version: 2, // bump to clear stale mapLayers with removed heatmap/traffic/bike keys
       storage: createJSONStorage(() => (typeof window !== "undefined" ? localStorage : (undefined as never))),
       partialize: (s) => ({
         theme: s.theme,

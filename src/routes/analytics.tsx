@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useDaily, useHourly, useYearly, useRouteCompare, useHeatmap } from "@/mock/api";
+import { PageSkeleton } from "@/components/ui-ext/Skeleton";
+import { PageError } from "@/components/ui-ext/QueryError";
 import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -19,11 +21,13 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function Analytics() {
-  const { data: daily = [] } = useDaily();
+  const { data: daily = [], isLoading: loadDaily, isError: errDaily, refetch } = useDaily();
   const { data: hourly = [] } = useHourly();
   const { data: yearly = [] } = useYearly();
-  const { data: cmp = [] } = useRouteCompare();
+  const { data: cmp = [], isLoading: loadCmp } = useRouteCompare();
   const { data: hood = [] } = useHeatmap();
+  if (loadDaily && loadCmp) return <PageSkeleton />;
+  if (errDaily && !daily.length) return <PageError onRetry={refetch} />;
 
   const exportCsv = () => {
     const csv = ["date,riders", ...daily.map((d) => `${d.date},${d.riders}`)].join("\n");
@@ -49,7 +53,7 @@ function Analytics() {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <ChartCard title="Daily ridership" subtitle="Last 14 days" className="lg:col-span-2 h-[320px]">
+        <ChartCard title="Daily ridership" subtitle="Last 14 days · CKAN delay incidents → estimated riders" className="lg:col-span-2 h-[320px]">
           <ResponsiveContainer>
             <BarChart data={daily}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -61,7 +65,7 @@ function Analytics() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Hourly pattern" subtitle="Avg over last week" className="h-[320px]">
+        <ChartCard title="Hourly pattern" subtitle="Time-of-day distribution · CKAN delay records" className="h-[320px]">
           <ResponsiveContainer>
             <LineChart data={hourly}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />

@@ -6,7 +6,7 @@ import {
 import { useKpis, useDisruptions, useHourly, useNetwork, useAiCards } from "@/mock/api";
 import { KpiCard } from "@/components/ui-ext/KpiCard";
 import { ChartCard, PageHeader, StatusPill } from "@/components/ui-ext/ChartCard";
-import { MapBox } from "@/components/map/MapBox";
+import { MiniNetworkMap } from "@/components/map/MiniNetworkMap";
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, BarChart, Bar,
 } from "recharts";
@@ -161,7 +161,7 @@ function Dashboard() {
           action={<Link to="/map" className="text-xs text-primary inline-flex items-center gap-1"><MapPin className="size-3" /> Full map</Link>}
         >
           <div className="h-[260px]">
-            <MapBox showVehicles={false} showStops={false} />
+            <MiniNetworkMap />
           </div>
         </ChartCard>
       </div>

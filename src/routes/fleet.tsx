@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bus, Battery, Wrench, Accessibility } from "lucide-react";
 import { useFleet } from "@/mock/api";
+import { PageSkeleton } from "@/components/ui-ext/Skeleton";
+import { PageError } from "@/components/ui-ext/QueryError";
 import { ChartCard, PageHeader } from "@/components/ui-ext/ChartCard";
 import { KpiCard } from "@/components/ui-ext/KpiCard";
 import {
@@ -15,7 +17,9 @@ export const Route = createFileRoute("/fleet")({
 const COLORS = ["var(--electric)", "var(--cyan)", "var(--teal)", "var(--warn)"];
 
 function FleetPage() {
-  const { data: fleet = [] } = useFleet();
+  const { data: fleet = [], isLoading, isError, refetch } = useFleet();
+  if (isLoading) return <PageSkeleton />;
+  if (isError && !fleet.length) return <PageError onRetry={refetch} />;
   const inService = fleet.filter((v) => v.status === "in-service").length;
   const charging = fleet.filter((v) => v.status === "charging").length;
   const accessible = Math.round((fleet.filter((v) => v.accessible).length / Math.max(1, fleet.length)) * 100);

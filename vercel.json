@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/ckan/:path*",
+      "destination": "https://ckan0.cf.opendata.inter.prod-toronto.ca/:path*"
+    },
+    {
+      "source": "/api/gtfsrt/:path*",
+      "destination": "https://bustime.ttc.ca/gtfsrt/:path*"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import { LayerControls } from "@/components/map/LayerControls";
 import { TimeTravel } from "@/components/map/TimeTravel";
 import { StopArrivalsPanel, type StopMeta } from "@/components/map/StopArrivalsPanel";
 import { useNetwork, useVehicles } from "@/mock/api";
+import { useBunching } from "@/hooks/useBunching";
 import type { Route as TransitRoute } from "@/mock/routes";
 import { ResponsiveContainer, AreaChart, Area, XAxis, Tooltip as RTooltip } from "recharts";
 import { hourlyRidership } from "@/mock/data";
@@ -30,6 +31,7 @@ function LiveMap() {
   const [query, setQuery] = useState("");
   const { data: net } = useNetwork();
   const { vehicles = [] } = useVehicles();
+  const bunchPairs = useBunching();
   const [hourly] = useState(() => hourlyRidership());
 
   const filtered =
@@ -93,9 +95,30 @@ function LiveMap() {
         </div>
       </div>
 
+      {/* Bunching alert badge */}
+      {bunchPairs.length > 0 && (
+        <div className="absolute bottom-44 md:bottom-20 left-4 z-[1000]">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold"
+            style={{ background: "rgba(249,115,22,0.18)", border: "1px solid rgba(249,115,22,0.45)", color: "#f97316" }}
+          >
+            <span className="size-2 rounded-full bg-[#f97316] animate-pulse" />
+            {bunchPairs.length} bunching event{bunchPairs.length > 1 ? "s" : ""} detected
+          </motion.div>
+        </div>
+      )}
+
       {/* Layer controls — moved to LEFT to avoid drawer overlap */}
       <div className="absolute bottom-28 md:bottom-6 left-4 z-[1000]">
-        <LayerControls counts={{ vehicles: vehicles.length, routes: net?.routes.length }} />
+        <LayerControls
+          counts={{
+            vehicles: vehicles.length,
+            routes: net?.routes.length,
+            stops: net?.stops.length,
+          }}
+        />
       </div>
 
       {/* Time travel — bottom center */}
