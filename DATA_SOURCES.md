@@ -1,8 +1,10 @@
 # Data Sources Statement
 
-**Project:** TransitLens  
-**Competition:** Transit Data Conference 2026 — Data Challenge  
-**Submitted pursuant to:** Section 4.4, Transit Data Challenge Official Rules  
+**Project:** TransitLens
+**Competition:** Transit Data Conference 2026 — Data Challenge
+**Live Prototype:** https://transit-lens.vercel.app/
+**Source Code:** https://github.com/adityashoor/TransitLens
+**Submitted pursuant to:** Section 4.4, Transit Data Challenge Official Rules
 **Date:** May 2026
 
 This document lists every dataset used in TransitLens, its origin, the licence under which it is used, and confirmation that no Personally Identifiable Information (PII) is present.
