@@ -2,6 +2,8 @@
  * useRealtimeVehicles — live TTC vehicle positions.
  *
  * Polls Supabase every 15s (vehicles refresh from edge function every ~30s).
+ * Supports both the deployed `vehicle_positions` table and the documented
+ * `tl_vehicles` fallback schema.
  * Avoids postgres_changes subscriptions which fire 638× per ingest and
  * crash the browser with ERR_INSUFFICIENT_RESOURCES.
  */
@@ -21,13 +23,15 @@ export interface RealtimeVehicle {
 }
 
 function dbRowToVehicle(row: Record<string, unknown>, i: number): RealtimeVehicle {
+  const secsSinceReport = (row.secs_since_report as number | undefined) ?? 0;
+  const explicitDelay = row.delay as number | undefined;
   return {
-    id: `v${i}-${row.vehicle_id}`,
-    routeId: (row.route_tag as string) ?? "unknown",
+    id: `v${i}-${(row.vehicle_id as string | undefined) ?? (row.id as string | undefined) ?? i}`,
+    routeId: (row.route_tag as string | undefined) ?? (row.route_id as string | undefined) ?? "unknown",
     pos: [row.lat as number, row.lon as number],
     bearing: (row.heading as number) ?? 0,
-    delay: ((row.secs_since_report as number) ?? 0) > 60 ? 2 : 0,
-    occupancy: Math.round(30 + Math.random() * 60),
+    delay: explicitDelay ?? (secsSinceReport > 60 ? 2 : 0),
+    occupancy: (row.occupancy as number | undefined) ?? Math.round(30 + Math.random() * 60),
     speedKmh: (row.speed_kmh as number) ?? 0,
     updatedAt: (row.updated_at as string) ?? "",
   };
@@ -44,9 +48,11 @@ export function useRealtimeVehicles() {
 
     async function load() {
       try {
-        const { data, error } = await supabase
-          .from("vehicle_positions")
-          .select("*");
+        const primary = await supabase.from("vehicle_positions").select("*");
+        const fallback = primary.error || !primary.data?.length
+          ? await supabase.from("tl_vehicles").select("*")
+          : primary;
+        const { data, error } = fallback;
         if (cancelled) return;
         if (!error && data && data.length > 0) {
           setVehicles(data.map(dbRowToVehicle));

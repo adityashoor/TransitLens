@@ -25,12 +25,12 @@ function Settings() {
       <PageHeader title="Settings" subtitle="Configure your TransitLens experience" />
 
       <div className="grid grid-cols-1 gap-4">
-        <ChartCard title="Profile" subtitle="Operator account">
+        <ChartCard title="Workspace" subtitle="Prototype session">
           <div className="flex items-center gap-4">
-            <div className="size-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold">AK</div>
+            <div className="size-14 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-primary-foreground font-bold">TL</div>
             <div>
-              <div className="font-semibold">Alex Kim</div>
-              <div className="text-xs text-muted-foreground">TTC Operations · alex@transitlens.io</div>
+              <div className="font-semibold">TransitLens prototype</div>
+              <div className="text-xs text-muted-foreground">No signed-in operator profile is connected.</div>
             </div>
           </div>
         </ChartCard>

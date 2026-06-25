@@ -283,7 +283,7 @@ async function fetchNetwork() {
   const baseRoutes = rawRoutes?.length ? rawRoutes : [];
 
   // Build routes from Supabase metadata + bundled GTFS shape paths
-  const routes: Route[] = baseRoutes
+  let routes: Route[] = baseRoutes
     .map((r, i) => {
       const rt = (r.route_type as number) ?? 3;
       const mode = MODE_MAP[rt] ?? "bus";
@@ -329,6 +329,36 @@ async function fetchNetwork() {
     routeIds: [],
     boardings: Math.round(200 + Math.random() * 2000),
   }));
+
+  // Supabase does not currently expose a route-stop join table. Until it does,
+  // derive conservative stop membership from proximity to the real GTFS shape.
+  if (routes.length && stops.length) {
+    routes = routes.map((route) => {
+      const sample = route.path.filter((_, i) => i % 5 === 0);
+      const stopIds = stops
+        .filter((stop) =>
+          sample.some((p) =>
+            Math.abs(p[0] - stop.pos[0]) < 0.003 &&
+            Math.abs(p[1] - stop.pos[1]) < 0.003,
+          ),
+        )
+        .slice(0, 80)
+        .map((stop) => stop.id);
+      return { ...route, stopIds };
+    });
+
+    const routeIdsByStop = new Map<string, string[]>();
+    for (const route of routes) {
+      for (const stopId of route.stopIds) {
+        const ids = routeIdsByStop.get(stopId) ?? [];
+        ids.push(route.id);
+        routeIdsByStop.set(stopId, ids);
+      }
+    }
+    stops.forEach((stop) => {
+      stop.routeIds = routeIdsByStop.get(stop.id) ?? [];
+    });
+  }
 
   // Fallback to mock if Supabase returned nothing
   if (routes.length === 0) return NETWORK;
@@ -644,13 +674,15 @@ async function computeRouteCompare(delayData: Record<string,string>[]) {
 
     const { data: rawRoutes } = await supabase
       .from("tl_routes")
-      .select("route_id, route_short_name")
+      .select("route_id, route_short_name, route_long_name")
       .in("route_id", topRoutes.map(([id]) => id));
 
     const nameMap = new Map((rawRoutes ?? []).map((r) => [r.route_id, r.route_short_name]));
+    const longNameMap = new Map((rawRoutes ?? []).map((r) => [r.route_id, r.route_long_name]));
 
     return topRoutes.map(([routeId, s]) => ({
       name: nameMap.get(routeId) ?? routeId,
+      longName: longNameMap.get(routeId) ?? "",
       riders: Math.round(90 + (s.total / delayData.length) * 2000), // proportional to service frequency
       onTime: Math.round((s.onTime / s.total) * 100),
       congestion: Math.min(95, Math.round((s.totalDelay / s.total) * 4)),
@@ -1184,12 +1216,12 @@ async function computeRouteStats(rows: Record<string,string>[]): Promise<Record<
 
 // ── Daily ridership: CKAN datastore_search incident count per day → scaled ────
 
-async function fetchDaily() {
+async function fetchDaily(days = 14) {
   try {
     const today = new Date();
-    // Build last-14-days date strings (YYYY-MM-DD)
+    // Build last-`days` date strings (YYYY-MM-DD)
     const dates: string[] = [];
-    for (let i = 13; i >= 0; i--) {
+    for (let i = days - 1; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       dates.push(d.toISOString().slice(0, 10));
@@ -1203,7 +1235,7 @@ async function fetchDaily() {
     );
 
     // If all queries failed, fall back to mock
-    if (counts.every((c) => c === null)) return dailyRidership();
+    if (counts.every((c) => c === null)) return dailyRidership(days);
 
     return dates.map((dateStr, i) => {
       const count = counts[i] ?? 0;
@@ -1226,7 +1258,7 @@ async function fetchDaily() {
       };
     });
   } catch {
-    return dailyRidership();
+    return dailyRidership(days);
   }
 }
 
@@ -1623,7 +1655,7 @@ export const useSubDelayRaw = () => useQuery({
 export const useKpis         = () => useQuery({ queryKey: ["kpis"],         queryFn: mockApi.kpis,         ...LIVE   });
 export const useNetwork      = () => useQuery({ queryKey: ["network"],      queryFn: mockApi.network,      ...STATIC });
 export const useHourly       = () => useQuery({ queryKey: ["hourly"],       queryFn: mockApi.hourly,       ...STD    });
-export const useDaily        = () => useQuery({ queryKey: ["daily"],        queryFn: mockApi.daily,        ...STD    });
+export const useDaily        = (days = 14) => useQuery({ queryKey: ["daily", days], queryFn: () => mockApi.daily(days), placeholderData: (prev) => prev, ...STD });
 export const useYearly       = () => useQuery({ queryKey: ["yearly"],       queryFn: mockApi.yearly,       ...STATIC });
 export const useRouteCompare = () => {
   const { data: busRows } = useBusDelayRaw();

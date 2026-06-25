@@ -24,16 +24,16 @@ function DemandPage() {
 
   return (
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
-      <PageHeader title="Origin–Destination Demand" subtitle="Presto tap-pair flows · AI demand-shift detection" />
+      <PageHeader title="Origin–Destination Demand" subtitle="Gravity-model OD estimates · published subway boardings · no PRESTO passenger records" />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-        <KpiCard label="Tap pairs / hr" value={fmtCompact(totalTrips)} delta={5.2} icon={ArrowRightLeft} accent="primary" />
+        <KpiCard label="Modeled trips / hr" value={fmtCompact(totalTrips)} delta={5.2} icon={ArrowRightLeft} accent="primary" />
         <KpiCard label="Hubs analyzed" value={hubs.length} format="raw" icon={Network} accent="cyan" />
         <KpiCard label="Top surge" value={`+${Math.max(...pairs.map((p) => p.shift))}%`} icon={TrendingUp} accent="success" />
         <KpiCard label="Top decline" value={`${Math.min(...pairs.map((p) => p.shift))}%`} icon={TrendingUp} accent="warn" />
       </div>
 
-      <ChartCard title="OD heatmap" subtitle="Rider volume between hubs · brighter = busier" className="mb-6">
+      <ChartCard title="OD heatmap" subtitle="Estimated rider volume between hubs · gravity model output" className="mb-6">
         <div className="overflow-x-auto">
           <div className="inline-block min-w-full">
             <div className="grid" style={{ gridTemplateColumns: `120px repeat(${hubs.length}, minmax(60px, 1fr))` }}>
@@ -73,7 +73,7 @@ function DemandPage() {
             ))}
           </ul>
         </ChartCard>
-        <ChartCard title="AI: surging corridors" subtitle="Largest 7-day demand shifts">
+        <ChartCard title="Modeled demand shifts" subtitle="Derived from station boarding imbalance, not live tap data">
           <ul className="space-y-2">
             {surging.map((p) => (
               <li key={`${p.from}-${p.to}`} className="rounded-xl border border-border bg-surface/40 p-3 flex items-center gap-3">

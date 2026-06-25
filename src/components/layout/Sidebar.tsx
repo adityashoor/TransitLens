@@ -1,28 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import {
-  LayoutDashboard, Map, BarChart3, Sparkles, Globe2, Activity, Route as RouteIcon, Settings, Train,
-  ChevronLeft, Siren, Bus, Network, ShieldAlert, CloudSnow, Wallet,
-} from "lucide-react";
+import { Train, ChevronLeft } from "lucide-react";
 import { useUI } from "@/store/ui";
 import { cn } from "@/lib/utils";
-
-const items = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/map", label: "Live Map", icon: Map },
-  { to: "/incidents", label: "Incidents", icon: Siren },
-  { to: "/fleet", label: "Fleet Health", icon: Bus },
-  { to: "/demand", label: "Demand (OD)", icon: Network },
-  { to: "/analytics", label: "Analytics", icon: BarChart3 },
-  { to: "/predictions", label: "AI Predictions", icon: Sparkles },
-  { to: "/equity", label: "Equity Heatmap", icon: Globe2 },
-  { to: "/safety", label: "Safety / Vision Zero", icon: ShieldAlert },
-  { to: "/weather", label: "Weather Impact", icon: CloudSnow },
-  { to: "/budget", label: "Budget & Subsidy", icon: Wallet },
-  { to: "/simulator", label: "Disruption Sim", icon: Activity },
-  { to: "/routes", label: "Route Explorer", icon: RouteIcon },
-  { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+import { NAV, isNavActive } from "@/lib/nav";
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUI();
@@ -48,8 +29,8 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
-        {items.map((it) => {
-          const active = it.to === "/" ? path === "/" : path.startsWith(it.to);
+        {NAV.map((it) => {
+          const active = isNavActive(it.to, path);
           const Icon = it.icon;
           return (
             <Link

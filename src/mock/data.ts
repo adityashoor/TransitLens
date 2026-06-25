@@ -42,6 +42,7 @@ export function yearlyGrowth() {
 export function routeComparison() {
   return NETWORK.routes.slice(0, 6).map((r) => ({
     name: r.shortName,
+    longName: r.longName,
     riders: Math.round(r.ridership / 1000),
     onTime: r.onTime,
     congestion: r.congestion,

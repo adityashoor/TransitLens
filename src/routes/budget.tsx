@@ -108,7 +108,7 @@ Write 3 numbered policy recommendations now:`;
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Budget & Subsidy"
-        subtitle="FAO Ontario 2024 cost benchmarks · equity-weighted subsidy analysis · real route financials"
+        subtitle="FAO Ontario 2024 benchmarks · modeled route-level cost and subsidy estimates"
       />
 
       {/* ── KPI row ────────────────────────────────────────────────────────── */}
@@ -152,7 +152,7 @@ Write 3 numbered policy recommendations now:`;
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-primary animate-pulse-glow" />
               <span className="text-sm font-semibold">Gemini · Budget Analysis</span>
-              <span className="text-[10px] text-muted-foreground">Using real FAO Ontario + Supabase equity data</span>
+              <span className="text-[10px] text-muted-foreground">Using FAO benchmarks + modeled route/equity estimates</span>
             </div>
             <button onClick={requestAnalysis} disabled={analysisLoading}
               className="size-6 rounded hover:bg-surface flex items-center justify-center text-muted-foreground disabled:opacity-40">
@@ -181,7 +181,7 @@ Write 3 numbered policy recommendations now:`;
         {/* Scatter chart */}
         <ChartCard
           title="Cost per rider × neighbourhood income"
-          subtitle="Bubble = ridership · lower-left = high subsidy need + low income (priority)"
+          subtitle="Bubble = modeled ridership · lower-left = estimated high subsidy need + lower-income service area"
           className="h-[400px]"
         >
           <ResponsiveContainer>
@@ -253,7 +253,7 @@ Write 3 numbered policy recommendations now:`;
       </div>
 
       {/* ── Equity priority table ───────────────────────────────────────────── */}
-      <ChartCard title="Routes by equity priority" subtitle="Ranked by: income area poverty + cost per rider + on-time reliability · red = urgent investment needed" className="mb-6">
+      <ChartCard title="Routes by modeled equity priority" subtitle="Ranked by estimated income area + modeled cost per rider + CKAN on-time reliability" className="mb-6">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="text-muted-foreground">

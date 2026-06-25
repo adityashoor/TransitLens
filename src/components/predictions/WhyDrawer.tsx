@@ -15,7 +15,7 @@ export function WhyDrawer({ open, onClose }: { open: boolean; onClose: () => voi
   const { data: weather = [] } = useWeather();
   const { data: net } = useNetwork();
 
-  // Build real context from live data
+  // Build context from available live/public inputs
   const now = new Date();
   const realCtx = {
     day:             now.toLocaleDateString("en-CA", { weekday: "long" }),
@@ -37,7 +37,7 @@ export function WhyDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     setLoading(true);
     setAiExplanation(null);
 
-    // Build context from real live data
+    // Build context from available live/public inputs
     const now = new Date();
     const hourStr = `${now.getHours()}:00`;
     const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
@@ -46,7 +46,7 @@ export function WhyDrawer({ open, onClose }: { open: boolean; onClose: () => voi
     const routeCount = net?.routes.length ?? 232;
     const activeVehicles = net?.routes.length ? routeCount * 8 : 0;
 
-    const prompt = `You are a Toronto transit (TTC) demand forecasting AI assistant. Explain in 3–4 clear sentences why transit demand is forecast as described, using only the real data provided. Be specific, data-driven, and actionable for a transit planner.
+    const prompt = `You are a Toronto transit (TTC) demand forecasting AI assistant. Explain in 3-4 clear sentences why transit demand is forecast as described, using only the source context provided. Be specific, data-driven, and actionable for a transit planner.
 
 Current conditions:
 - Time: ${hourStr} on ${dayName}
@@ -99,7 +99,7 @@ Explain why demand is forecast at current levels and what transit planners shoul
               <div className="flex-1">
                 <div className="font-semibold">Why this prediction?</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {geminiAvailable ? "Gemini Flash · real-time analysis" : "Feature attribution breakdown"}
+                  {geminiAvailable ? "Gemini Flash · source-context analysis" : "Feature attribution breakdown"}
                 </div>
               </div>
               <button onClick={onClose} className="size-8 rounded-lg hover:bg-surface flex items-center justify-center" aria-label="Close">
@@ -113,12 +113,12 @@ Explain why demand is forecast at current levels and what transit planners shoul
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Sparkles className="size-3.5 text-primary animate-pulse-glow" />
-                    <span className="text-xs font-semibold text-primary">Gemini Flash Analysis</span>
+                    <span className="text-xs font-semibold text-primary">Gemini Flash Source Analysis</span>
                   </div>
                   {loading ? (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Loader2 className="size-3.5 animate-spin" />
-                      Analysing live TTC conditions…
+                      Analysing available TTC conditions...
                     </div>
                   ) : aiExplanation ? (
                     <p className="text-xs text-foreground leading-relaxed">{aiExplanation}</p>
@@ -160,7 +160,7 @@ Explain why demand is forecast at current levels and what transit planners shoul
 
               <div className="rounded-xl border border-border bg-surface/40 p-3 text-xs text-muted-foreground">
                 {geminiAvailable
-                  ? "AI explanation powered by Gemini Flash using live GTFS-RT, weather, and disruption data."
+                  ? "AI explanation powered by Gemini Flash using available GTFS-RT, weather, disruption, and modeled attribution context."
                   : "Attributions use SHAP-style approximation on the gradient-boosted forecaster."}
               </div>
             </div>

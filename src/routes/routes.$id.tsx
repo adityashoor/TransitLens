@@ -14,7 +14,7 @@ export const Route = createFileRoute("/routes/$id")({
   head: ({ params }) => ({
     meta: [
       { title: `Route ${params.id} — TransitLens` },
-      { name: "description", content: `Real-time analytics for route ${params.id}: ridership, on-time performance, stops.` },
+      { name: "description", content: `Route ${params.id} analytics: modeled ridership, CKAN-derived on-time performance, and inferred stops.` },
     ],
   }),
   component: RouteDetail,
@@ -183,7 +183,7 @@ function RouteDetail() {
         <StatusPill status={realStatus} />
       </div>
 
-      {/* KPI row — real data */}
+      {/* KPI row: public-source metrics plus modeled estimates */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         {[
           {
@@ -221,7 +221,7 @@ function RouteDetail() {
 
       {/* Map + per-route demand curve */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <ChartCard title="Route map" subtitle="Path & live vehicles · GTFS-RT" className="lg:col-span-2 h-[420px]">
+        <ChartCard title="Route map" subtitle="GTFS path & available vehicle positions" className="lg:col-span-2 h-[420px]">
           <MapBox highlightRouteId={r.id} showVehicles zoom={12} />
         </ChartCard>
 
@@ -306,7 +306,7 @@ function RouteDetail() {
       <ChartCard
         title="Stop sequence"
         subtitle={routeStops.length > 0
-          ? `${routeStops.length} real TTC stops from Supabase · boardings proportional to route ridership`
+          ? `${routeStops.length} TTC stops from Supabase · boardings are modeled from route ridership`
           : `${r.stopIds.length} stops along the corridor`}
       >
         {routeStops.length === 0 && r.stopIds.length === 0 ? (
