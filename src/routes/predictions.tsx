@@ -21,7 +21,7 @@ export const Route = createFileRoute("/predictions")({
   head: () => ({
     meta: [
       { title: "Weather × TTC Impact — TransitLens" },
-      { name: "description", content: "Real-time weather impact on TTC service: route risk, hourly forecasts, delay predictions." },
+      { name: "description", content: "Live weather with modeled TTC service-risk estimates and AI-assisted recommendations." },
     ],
   }),
   component: Predictions,
@@ -211,7 +211,7 @@ Write 3 numbered recommendations now:`;
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Weather × TTC Impact"
-        subtitle={`Live service risk assessment · ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" })} · ${new Date().toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" })}`}
+        subtitle={`Live weather + modeled service risk · ${new Date().toLocaleDateString("en-CA", { weekday: "long", month: "short", day: "numeric" })} · ${new Date().toLocaleTimeString("en-CA", { hour: "2-digit", minute: "2-digit" })}`}
         action={
           <div className="flex items-center gap-2">
             <button
@@ -327,8 +327,8 @@ Write 3 numbered recommendations now:`;
 
         {/* Gemini operational recommendations */}
         <ChartCard
-          title="Gemini · Operations recommendations"
-          subtitle="Based on live weather + disruption data"
+          title="Gemini · Modeled operations recommendations"
+          subtitle="Client-side prototype using live weather, public disruptions, and modeled risk"
           className="lg:col-span-2"
           action={
             geminiAvailable && (
@@ -350,7 +350,7 @@ Write 3 numbered recommendations now:`;
           ) : geminiInsight ? (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-[10px] text-primary font-semibold uppercase tracking-wider">
-                <Sparkles className="size-3 animate-pulse-glow" /> Live AI Recommendations
+                <Sparkles className="size-3 animate-pulse-glow" /> Modeled AI Recommendations
               </div>
               {parseRecommendations(geminiInsight).map((rec, i) => (
                 <div key={i} className="flex items-start gap-3 rounded-xl border border-border bg-surface/40 p-3">
@@ -369,8 +369,8 @@ Write 3 numbered recommendations now:`;
 
       {/* ── Row 3: 24h weather + delay forecast chart ───────────────────────── */}
       <ChartCard
-        title="24-hour weather & delay risk forecast"
-        subtitle="Precipitation probability + predicted bus/streetcar delay risk · Open-Meteo live"
+        title="24-hour weather & modeled delay risk"
+        subtitle="Precipitation probability + heuristic bus/streetcar risk · Open-Meteo live"
         className="h-[320px] mb-4"
       >
         <ResponsiveContainer>
@@ -402,7 +402,7 @@ Write 3 numbered recommendations now:`;
         {/* At-risk routes */}
         <ChartCard
           title="At-risk routes"
-          subtitle="Low on-time % + high weather vulnerability"
+          subtitle="CKAN on-time estimates + modeled weather vulnerability"
           className="lg:col-span-2"
         >
           {atRiskRoutes.length === 0 ? (
@@ -481,7 +481,7 @@ Write 3 numbered recommendations now:`;
       {/* ── Row 5: Precipitation × delay bar chart ──────────────────────────── */}
       <ChartCard
         title="Hourly precipitation vs. predicted bus delay risk"
-        subtitle="Next 12 hours · rain probability (cyan) vs delay risk (amber) · Open-Meteo + TTC patterns"
+        subtitle="Next 12 hours · rain probability (cyan) vs modeled delay risk (amber)"
         className="h-[280px] mb-4"
       >
         <ResponsiveContainer>

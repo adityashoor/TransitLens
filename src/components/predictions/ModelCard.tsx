@@ -19,7 +19,7 @@ export function ModelCard() {
     staleTime: 3_600_000,
   });
 
-  // Derive real values
+  // Derive values from available public/Supabase sources and model metadata
   const routeCount  = net?.routes.length ?? "—";
   const accuracy    = metrics?.accuracy_pct   ?? 90;
   const mae         = metrics?.mae            ?? "3.4%";
@@ -52,7 +52,7 @@ export function ModelCard() {
     },
     {
       icon: Target,
-      label: "MAE / MAPE",
+      label: "Modeled MAE / MAPE",
       value: `${mae} / ${mape}`,
       sub: `R²=${r2} · ${accuracy}% accuracy`,
     },
@@ -67,12 +67,12 @@ export function ModelCard() {
   return (
     <DataCard
       title={`${MODEL_CARD_STATIC.name}`}
-      subtitle={`${routeCount} routes · ${activeSources.length} live data inputs · refreshes every ${MODEL_CARD_STATIC.refreshedEvery}`}
+      subtitle={`${routeCount} routes · ${activeSources.length} source inputs · modeled risk refreshes every ${MODEL_CARD_STATIC.refreshedEvery}`}
       icon={<Cpu className="size-5 text-primary" />}
       footer={
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-            <Wifi className="size-3 text-success" /> Active data inputs
+            <Wifi className="size-3 text-success" /> Source inputs
           </div>
           <div className="flex flex-wrap gap-1.5">
             {activeSources.map((src) => (

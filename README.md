@@ -21,16 +21,16 @@ TransitLens integrates live public data feeds into a single decision-support das
 | Page | Analytical purpose | Primary data source |
 |---|---|---|
 | **Dashboard** | Network health KPIs + live disruption feed | Supabase · Umo/NextBus XML |
-| **Map** | Real-time vehicles, route shapes, **bus bunching detection** | TTC GTFS-RT · GTFS Static |
+| **Map** | Vehicle positions, route shapes, **bus bunching detection**, estimated stop arrivals | TTC GTFS-RT · GTFS Static |
 | **Analytics** | Daily trend, on-time rates by route, year-over-year growth | TTC Bus Delay Data (CKAN) · TTC Operating Stats |
 | **Incidents** | Bus & subway delay events ranked by severity | Toronto Open Data 2025 delay CSVs |
 | **Safety / Vision Zero** | Collision & near-miss events from delay data + KSI collisions | TTC Delay Data · Toronto Police KSI (ArcGIS) |
 | **Equity** | Neighbourhood mobility scores, underserved area ranking + actionable service recommendations | Supabase `tl_equity` · GTFS stops |
 | **Predictions** | 24 h demand-index forecast with confidence bands anchored to live GTFS-RT delay signal | TTC GTFS-RT trip updates |
-| **Fleet** | Vehicle roster with live in-service status from GTFS-RT vehicle positions feed | TTC GTFS-RT vehicles |
-| **Budget** | Cost-per-rider and subsidy gap by route; equity-income scatter chart | FAO Ontario 2024 report · Supabase equity |
+| **Fleet** | Modeled vehicle roster with live in-service status from GTFS-RT vehicle positions feed | TTC GTFS-RT vehicles · roster template |
+| **Budget** | Modeled cost-per-rider and subsidy gap by route; equity-income scatter chart | FAO Ontario 2024 report · Supabase equity |
 | **Weather** | 48 h Toronto forecast with transit ridership impact rating | Open-Meteo API |
-| **Routes** | Per-route stop map and hourly ridership detail | Supabase `tl_routes` / `tl_stops` |
+| **Routes** | Per-route stop map and modeled hourly ridership detail | Supabase `tl_routes` / `tl_stops` |
 | **Simulator** | Disruption scenario modelling with cascading ridership impact estimates | GTFS network + parametric model |
 
 ### Novel feature: real-time bunching detection
@@ -122,7 +122,7 @@ create table tl_equity (
   stop_density float
 );
 
-create table tl_vehicles (
+create table vehicle_positions (
   id text primary key,
   route_id text,
   lat float,

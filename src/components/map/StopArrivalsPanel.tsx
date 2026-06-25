@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Bus, X } from "lucide-react";
-import type { Route as TransitRoute } from "@/mock/routes";
+import { useMemo } from "react";
 import { seeded } from "@/lib/format";
 import { useNetwork } from "@/mock/api";
 
@@ -13,13 +13,24 @@ export interface StopMeta {
 
 export function StopArrivalsPanel({ stop, onClose }: { stop: StopMeta; onClose: () => void }) {
   const { data: net } = useNetwork();
-  const route = net?.routes.find((r) => r.id === stop.routeId);
+  const route = useMemo(() => {
+    const direct = net?.routes.find((r) => r.id === stop.routeId);
+    if (direct || !net) return direct;
+    return net.routes.find((r) =>
+      r.path.some((p, i) =>
+        i % 5 === 0 &&
+        Math.abs(p[0] - stop.pos[0]) < 0.003 &&
+        Math.abs(p[1] - stop.pos[1]) < 0.003,
+      ),
+    );
+  }, [net, stop.pos, stop.routeId]);
   const rng = seeded(stop.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0));
+  const baseHeadway = route?.headway ?? 10;
   const arrivals = Array.from({ length: 4 }, (_, i) => {
-    const eta = Math.round((i * 4 + rng() * 6) + 1);
+    const eta = Math.round((i * baseHeadway + rng() * Math.max(4, baseHeadway)) + 1);
     const delay = Math.round((rng() - 0.6) * 5);
     return {
-      headsign: route?.longName.split(" - ")[0] ?? "Outbound",
+      headsign: route?.longName.split(" - ")[0] ?? "Estimated service",
       eta,
       delay,
       occupancy: Math.round(rng() * 100),
@@ -77,7 +88,9 @@ export function StopArrivalsPanel({ stop, onClose }: { stop: StopMeta; onClose: 
           </li>
         ))}
       </ul>
-      <div className="mt-2 text-[10px] text-muted-foreground">Mock data — wire to TTC NextBus / GTFS-RT later.</div>
+      <div className="mt-2 text-[10px] text-muted-foreground">
+        Estimated arrivals from route headway and stop location. Live stop predictions are not connected.
+      </div>
     </motion.div>
   );
 }

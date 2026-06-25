@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const LAYER_META = {
   routes:   { label: "Routes",   icon: Train,  hint: "Subway, streetcar & bus lines" },
   stops:    { label: "Stops",    icon: MapPin, hint: "TTC stops — zoom in to see" },
-  vehicles: { label: "Vehicles", icon: Bus,    hint: "Live positions from GTFS-RT" },
+  vehicles: { label: "Vehicles", icon: Bus,    hint: "Live GTFS-RT or Supabase fallback positions" },
 } as const;
 
 interface Props {

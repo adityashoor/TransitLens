@@ -1,3 +1,5 @@
+// Optional legacy backend client. Current route pages use `src/mock/api.ts`,
+// which is the active hybrid adapter for Supabase, public APIs, and fallbacks.
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 async function request(path, options = {}) {

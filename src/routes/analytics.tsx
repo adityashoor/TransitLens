@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { useDaily, useHourly, useYearly, useRouteCompare, useHeatmap } from "@/mock/api";
 import { PageSkeleton } from "@/components/ui-ext/Skeleton";
 import { PageError } from "@/components/ui-ext/QueryError";
@@ -7,8 +8,14 @@ import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
   XAxis, YAxis, Tooltip as RTooltip, CartesianGrid, Legend,
 } from "recharts";
-import { Download, Calendar, Filter } from "lucide-react";
+import { Download, Calendar, Filter, ChevronDown } from "lucide-react";
 import { fmtCompact } from "@/lib/format";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
+const RANGES = [7, 14, 30, 90] as const;
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({
@@ -21,7 +28,10 @@ export const Route = createFileRoute("/analytics")({
 });
 
 function Analytics() {
-  const { data: daily = [], isLoading: loadDaily, isError: errDaily, refetch } = useDaily();
+  const [days, setDays] = useState<number>(14);
+  const [routeFilter, setRouteFilter] = useState<string>("all");
+
+  const { data: daily = [], isLoading: loadDaily, isFetching: fetchDaily, isError: errDaily, refetch } = useDaily(days);
   const { data: hourly = [] } = useHourly();
   const { data: yearly = [] } = useYearly();
   const { data: cmp = [], isLoading: loadCmp } = useRouteCompare();
@@ -29,12 +39,21 @@ function Analytics() {
   if (loadDaily && loadCmp) return <PageSkeleton />;
   if (errDaily && !daily.length) return <PageError onRetry={refetch} />;
 
+  const cmpFiltered = routeFilter === "all" ? cmp : cmp.filter((r) => r.name === routeFilter);
+  const selectedRoute = cmp.find((r) => r.name === routeFilter);
+  const routeLabel =
+    routeFilter === "all"
+      ? "All routes"
+      : selectedRoute?.longName
+        ? `${selectedRoute.name} · ${selectedRoute.longName}`
+        : routeFilter;
+
   const exportCsv = () => {
     const csv = ["date,riders", ...daily.map((d) => `${d.date},${d.riders}`)].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "ridership.csv";
+    a.download = `ridership-${days}d.csv`;
     a.click();
   };
 
@@ -42,18 +61,53 @@ function Analytics() {
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Ridership Analytics"
-        subtitle="Drill down into TTC ridership patterns across time, route, and geography"
+        subtitle="Ridership estimates, CKAN delay-derived reliability, and public operating-stat trends"
         action={
           <div className="flex flex-wrap gap-2">
-            <button className="h-9 px-3 rounded-lg glass-card text-xs flex items-center gap-2"><Calendar className="size-3.5" /> Last 14 days</button>
-            <button className="h-9 px-3 rounded-lg glass-card text-xs flex items-center gap-2"><Filter className="size-3.5" /> All routes</button>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="h-9 px-3 rounded-lg glass-card text-xs flex items-center gap-2 outline-none focus:ring-2 focus:ring-ring/40">
+                <Calendar className="size-3.5" /> Last {days} days
+                {fetchDaily && <span className="size-1.5 rounded-full bg-primary animate-pulse" />}
+                <ChevronDown className="size-3.5 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-40">
+                <DropdownMenuLabel>Date range</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+                  {RANGES.map((r) => (
+                    <DropdownMenuRadioItem key={r} value={String(r)}>Last {r} days</DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger className="h-9 px-3 rounded-lg glass-card text-xs flex items-center gap-2 outline-none focus:ring-2 focus:ring-ring/40">
+                <Filter className="size-3.5 shrink-0" />
+                <span className="max-w-[140px] truncate">{routeLabel}</span>
+                <ChevronDown className="size-3.5 opacity-60 shrink-0" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-48 max-h-72 overflow-y-auto scrollbar-thin">
+                <DropdownMenuLabel>Route comparison</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={routeFilter} onValueChange={setRouteFilter}>
+                  <DropdownMenuRadioItem value="all">All routes</DropdownMenuRadioItem>
+                  {cmp.map((r) => (
+                    <DropdownMenuRadioItem key={r.name} value={r.name}>
+                      {r.longName ? `${r.name} · ${r.longName}` : r.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button onClick={exportCsv} className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-medium flex items-center gap-2"><Download className="size-3.5" /> Export CSV</button>
           </div>
         }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <ChartCard title="Daily ridership" subtitle="Last 14 days · CKAN delay incidents → estimated riders" className="lg:col-span-2 h-[320px]">
+        <ChartCard title="Daily ridership" subtitle={`Last ${days} days · CKAN delay incidents → estimated riders`} className="lg:col-span-2 h-[320px]">
           <ResponsiveContainer>
             <BarChart data={daily}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -65,7 +119,7 @@ function Analytics() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Hourly pattern" subtitle="Time-of-day distribution · CKAN delay records" className="h-[320px]">
+        <ChartCard title="Hourly pattern" subtitle="Estimated time-of-day ridership · Supabase or CKAN delay distribution" className="h-[320px]">
           <ResponsiveContainer>
             <LineChart data={hourly}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -80,9 +134,9 @@ function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
-        <ChartCard title="Route comparison" subtitle="Riders (k) vs on-time %" className="lg:col-span-2 h-[300px]">
+        <ChartCard title="Route comparison" subtitle={routeFilter === "all" ? "Estimated riders (k) vs CKAN on-time %" : `${routeLabel} · estimated riders (k) vs CKAN on-time %`} className="lg:col-span-2 h-[300px]">
           <ResponsiveContainer>
-            <BarChart data={cmp}>
+            <BarChart data={cmpFiltered}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis yAxisId="l" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
@@ -119,7 +173,7 @@ function Analytics() {
         </ChartCard>
       </div>
 
-      <ChartCard title="Neighborhood heatmap" subtitle="Trip density by hour">
+      <ChartCard title="Neighborhood heatmap" subtitle="Modeled stop-density intensity by hour">
         <div className="overflow-x-auto scrollbar-thin">
           <div className="min-w-[800px]">
             <div className="flex text-[10px] text-muted-foreground pl-32 gap-px mb-1">

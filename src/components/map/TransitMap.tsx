@@ -120,6 +120,17 @@ export function TransitMap({
   // Only show stops when zoomed in — at city scale they're visual noise
   const showStopDots = showStops && mapLayers.stops && mapZoom >= 13 && realStops.length > 0;
 
+  const inferStopRouteId = (stopPos: LatLng) => {
+    const candidate = orderedRoutes.find((route) =>
+      route.path.some((p, i) =>
+        i % 5 === 0 &&
+        Math.abs(p[0] - stopPos[0]) < 0.003 &&
+        Math.abs(p[1] - stopPos[1]) < 0.003,
+      ),
+    );
+    return candidate?.id ?? "";
+  };
+
   return (
     <div className={className} style={{ height, width: "100%", borderRadius: 16, overflow: "hidden" }}>
       <MapContainer
@@ -218,7 +229,7 @@ export function TransitMap({
             }}
             eventHandlers={{
               click: () => onStopClick?.({
-                id: s.id, routeId: "", name: s.name, pos: s.pos,
+                id: s.id, routeId: s.routeIds[0] ?? inferStopRouteId(s.pos), name: s.name, pos: s.pos,
               }),
             }}
           >

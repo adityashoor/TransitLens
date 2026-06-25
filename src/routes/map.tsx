@@ -18,7 +18,7 @@ export const Route = createFileRoute("/map")({
   head: () => ({
     meta: [
       { title: "Live Map — TransitLens" },
-      { name: "description", content: "Real-time TTC vehicle tracking, route layers, stop arrivals, and time-travel replay." },
+      { name: "description", content: "TTC vehicle tracking, route layers, estimated stop arrivals, and time-travel replay." },
       { property: "og:title", content: "TransitLens Live Map" },
     ],
   }),
@@ -52,7 +52,7 @@ function LiveMap() {
   }, [stop, selected]);
 
   return (
-    <div className="relative h-[calc(100vh-64px)] overflow-hidden">
+    <div className="relative h-[calc(100dvh-7.5rem)] md:h-[calc(100dvh-4rem)] overflow-hidden">
       <MapBox
         height="100%"
         highlightRouteId={selected?.id ?? null}
@@ -149,7 +149,7 @@ function LiveMap() {
               </span>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{selected.longName}</div>
-                <div className="text-xs text-muted-foreground capitalize">{selected.mode} · {selected.stopIds.length} stops</div>
+                <div className="text-xs text-muted-foreground capitalize">{selected.mode} · {selected.stopIds.length || "estimated"} stops</div>
               </div>
               <button onClick={() => setSelected(null)} className="size-8 rounded-lg hover:bg-surface flex items-center justify-center" aria-label="Close route panel">
                 <X className="size-4" />
@@ -169,7 +169,7 @@ function LiveMap() {
                   ["Congestion", `${selected.congestion}/100`],
                   ["AI score", `${selected.aiScore}`],
                   ["Trend", `${selected.trend > 0 ? "+" : ""}${selected.trend}%`],
-                  ["Stops", `${selected.stopIds.length}`],
+                  ["Stops", selected.stopIds.length ? `${selected.stopIds.length}` : "est."],
                 ].map(([k, v]) => (
                   <div key={k} className="rounded-xl border border-border bg-surface/40 p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</div>

@@ -70,12 +70,12 @@ function Equity() {
     <div className="px-4 md:px-6 py-6 max-w-[1600px] mx-auto">
       <PageHeader
         title="Equity Heatmap"
-        subtitle="Mobility access across 25 Toronto neighborhoods"
+        subtitle="Supabase equity scores where available · prototype polygons and estimates as fallback"
       />
       <InsightStrip insights={equityInsights} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="Mobility score by neighborhood" subtitle="Click an area for details" className="lg:col-span-2 h-[600px]">
+        <ChartCard title="Mobility score by neighborhood" subtitle="Click an area for details · estimated/prototype geometry when source polygons are unavailable" className="lg:col-span-2 h-[600px]">
           <ClientOnly fallback={<div className="size-full grid place-items-center text-xs text-muted-foreground">Loading map…</div>}>
             <HoodsMap onHoodClick={(h) => setSelected(h)} />
           </ClientOnly>
@@ -106,7 +106,7 @@ function Equity() {
             )}
           </div>
 
-          <ChartCard title="Top underserved" subtitle="Lowest mobility scores">
+          <ChartCard title="Top underserved" subtitle="Lowest available or estimated mobility scores">
             <ul className="space-y-2">
               {underserved.map((h, i) => (
                 <motion.li
@@ -128,7 +128,7 @@ function Equity() {
           </ChartCard>
 
           <div className="glass-card rounded-2xl p-5">
-            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Service recommendations</div>
+            <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Modeled service recommendations</div>
             <ul className="text-xs text-muted-foreground space-y-2">
               {underserved.slice(0, 3).map((h) => (
                 <li key={h.id}>
@@ -148,7 +148,7 @@ function Equity() {
         </div>
       </div>
 
-      <ChartCard title="All neighborhoods" subtitle="Sortable rankings" className="mt-4">
+      <ChartCard title="All neighborhoods" subtitle="Sortable rankings · income labels are derived unless backed by Supabase fields" className="mt-4">
         <div className="overflow-x-auto scrollbar-thin">
           <table className="w-full text-sm">
             <thead className="text-xs text-muted-foreground uppercase tracking-wider">

@@ -117,7 +117,7 @@ export function attributionsFor(
 
 // ── Model card — values pulled from Supabase tl_model_metrics at runtime ──────
 // Hardcoded fields are methodology constants, not live metrics.
-// Live fields (accuracy, routes, mae) come from fetchAiCards / tl_model_metrics.
+// Runtime fields (accuracy, routes, mae) come from fetchAiCards / tl_model_metrics.
 
 export const MODEL_CARD_STATIC = {
   name: "TransitLens Forecaster",
